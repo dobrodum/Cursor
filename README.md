@@ -54,3 +54,45 @@ converted,clicks,impressions,completed,assigned,age,score
 0,2,80,3,9,41,0.31
 1,6,50,7,8,35,0.58
 ```
+
+## Imperial table scenario: 1/2/3/4-quarter sensitivity + FY 4Q25 estimate
+
+If your current `% Sales Captured in DB` uses a 4-quarter lookback and you want to
+see what changes when it is set to 1, 2, 3, and 4 quarters (plus impact to
+`Estimated Total Sold` for FY 4Q25), use:
+
+```bash
+python3 sales_capture_quarter_sensitivity.py \
+  --data imperial_table.xlsx \
+  --sheet Imperial \
+  --quarter-col quarter \
+  --db-sales-col sales_in_db \
+  --total-sales-col total_sales \
+  --windows 1,2,3,4 \
+  --baseline-quarter 4 \
+  --estimate-quarter FY4Q25 \
+  --output imperial_sensitivity_output.csv
+```
+
+### What this prints
+
+- `% Sales Captured in DB` for each window (1/2/3/4)
+- difference in percentage points vs baseline 4-quarter setting
+- `Estimated Total Sold` in FY 4Q25 for each window
+- difference in estimate vs baseline
+- overall **min** and **max** Estimated Total Sold (and which window produced each)
+
+### Formula used for estimate
+
+`Estimated Total Sold = DB Sales in FY4Q25 / (% Sales Captured in DB / 100)`
+
+### Input file support
+
+- `.xlsx` / `.xlsm` (requires `openpyxl`)
+- `.csv`
+
+If `openpyxl` is missing, install once:
+
+```bash
+pip3 install openpyxl
+```
