@@ -258,28 +258,17 @@ def process_regression(wb, file_path):
     return calc_pulls
 
 
-def format_sheet(ws, model_merge_ranges):
+def format_sheet(ws):
     for cell in ws[1]:
         cell.font = Font(size=12, bold=True)
         cell.alignment = Alignment(horizontal="center")
 
-    for col_idx in range(1, ws.max_column + 1):
+    ws.column_dimensions["A"].width = 32
+    for col_idx in range(2, ws.max_column + 1):
         ws.column_dimensions[ws.cell(1, col_idx).column_letter].width = 16
 
-    model_col = ws.max_column
-    ws.column_dimensions[ws.cell(1, model_col).column_letter].width = 32
-
-    for start_row, end_row, file_label in model_merge_ranges:
-        if end_row > start_row:
-            ws.merge_cells(
-                start_row=start_row,
-                start_column=model_col,
-                end_row=end_row,
-                end_column=model_col,
-            )
-
-        cell = ws.cell(start_row, model_col)
-        cell.value = file_label
+    for row_idx in range(2, ws.max_row + 1):
+        cell = ws.cell(row_idx, 1)
         cell.font = Font(size=12, bold=True)
         cell.alignment = Alignment(
             horizontal="center",
@@ -400,7 +389,6 @@ def main():
     ]
 
     emp_rows = []
-    emp_merge_ranges = []
     current_row = 2
 
     for file_label, calc, raw in empirical_results_per_file:
@@ -408,10 +396,7 @@ def main():
         df_r = pd.DataFrame(raw, columns=emp_col_raw)
         df_file = pd.concat([df_c, df_r], axis=1)
 
-        df_file["model"] = file_label
-        emp_merge_ranges.append(
-            (current_row, current_row + len(df_file) - 1, file_label)
-        )
+        df_file.insert(0, "model", file_label)
 
         current_row += len(df_file)
         emp_rows.append(df_file)
@@ -419,19 +404,15 @@ def main():
     if emp_rows:
         df_empirical = pd.concat(emp_rows, ignore_index=True)
     else:
-        df_empirical = pd.DataFrame(columns=emp_col_calc + emp_col_raw + ["model"])
+        df_empirical = pd.DataFrame(columns=["model"] + emp_col_calc + emp_col_raw)
 
     reg_rows = []
-    reg_merge_ranges = []
     current_row = 2
 
     for file_label, calc in regression_results_per_file:
         df_file = pd.DataFrame(calc, columns=reg_col_calc)
 
-        df_file["model"] = file_label
-        reg_merge_ranges.append(
-            (current_row, current_row + len(df_file) - 1, file_label)
-        )
+        df_file.insert(0, "model", file_label)
 
         current_row += len(df_file)
         reg_rows.append(df_file)
@@ -439,7 +420,7 @@ def main():
     if reg_rows:
         df_regression = pd.concat(reg_rows, ignore_index=True)
     else:
-        df_regression = pd.DataFrame(columns=reg_col_calc + ["model"])
+        df_regression = pd.DataFrame(columns=["model"] + reg_col_calc)
 
     with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
         df_empirical.to_excel(writer, index=False, sheet_name="Empirical Param")
@@ -447,8 +428,8 @@ def main():
 
     wb2 = load_workbook(output_file)
 
-    format_sheet(wb2["Empirical Param"], emp_merge_ranges)
-    format_sheet(wb2["Regression Param"], reg_merge_ranges)
+    format_sheet(wb2["Empirical Param"])
+    format_sheet(wb2["Regression Param"])
 
     wb2.save(output_file)
 
