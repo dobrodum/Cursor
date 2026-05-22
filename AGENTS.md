@@ -10,6 +10,7 @@ The `main` branch contains only `README.md`. All code lives on feature branches:
 
 - `cursor/parameter-selection-bc51` — `parameter_search.py` and `sales_capture_quarter_sensitivity.py`
 - `cursor/fix-xlwings-script-c576` — `rolling_average_excel_model.py`
+- `cursor/dev-environment-setup-8900` — `batch_param_extraction.py`
 
 ### Scripts overview
 
@@ -18,6 +19,7 @@ The `main` branch contains only `README.md`. All code lives on feature branches:
 | `parameter_search.py` | Python stdlib only | Yes |
 | `sales_capture_quarter_sensitivity.py` | stdlib + optional `openpyxl` | Yes |
 | `rolling_average_excel_model.py` | `xlwings` + desktop Excel | **No** (macOS/Windows only) |
+| `batch_param_extraction.py` | `pandas` + `openpyxl` + `xlwings` + desktop Excel | **No** (macOS/Windows only) |
 
 ### Running scripts
 
@@ -32,5 +34,5 @@ python3 sales_capture_quarter_sensitivity.py --data <csv> --quarter-col <col> --
 ### Important caveats
 
 - `rolling_average_excel_model.py` will raise `RuntimeError` on Linux — it requires a macOS/Windows machine with Microsoft Excel installed. On Cloud Agent VMs, you can only syntax-check it (`python3 -c "import py_compile; py_compile.compile('rolling_average_excel_model.py')"`) and run `--help`.
-- There is no `requirements.txt`, `pyproject.toml`, or formal dependency management. The update script installs `openpyxl` via pip.
+- There is no `requirements.txt`, `pyproject.toml`, or formal dependency management. The update script installs `openpyxl` and `pandas` via pip.
 - There are no automated tests, linting configuration, or build steps in this repository.
