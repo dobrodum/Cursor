@@ -339,7 +339,11 @@ def extract_empirical_rows(
         return []
 
     snapshot = snapshot_sheet(sheet)
-    anchor_row, anchor_col = find_anchor(snapshot, "max")
+    try:
+        anchor_row, anchor_col = find_anchor(snapshot, "max")
+    except ValueError as exc:
+        print(f"Skipped empirical extraction for {source_file}: {exc}")
+        return []
     anchor = (anchor_row, anchor_col)
 
     columns = get_empirical_columns(snapshot, anchor_col, anchor)
@@ -463,7 +467,11 @@ def extract_regression_rows(
         return []
 
     snapshot = snapshot_sheet(sheet)
-    anchor_row, anchor_col = find_anchor(snapshot, "max")
+    try:
+        anchor_row, anchor_col = find_anchor(snapshot, "max")
+    except ValueError as exc:
+        print(f"Skipped regression extraction for {source_file}: {exc}")
+        return []
     anchor = (anchor_row, anchor_col)
 
     x_col = safe_col(anchor_col, -11)
@@ -674,12 +682,18 @@ def main() -> None:
                 try:
                     workbook = app.books.open(str(file_path), update_links=False)
                     meta = parse_file_meta(file_path.name)
-                    empirical_rows.extend(
-                        extract_empirical_rows(workbook, meta=meta, source_file=file_path.name)
-                    )
-                    regression_rows.extend(
-                        extract_regression_rows(workbook, meta=meta, source_file=file_path.name)
-                    )
+                    try:
+                        empirical_rows.extend(
+                            extract_empirical_rows(workbook, meta=meta, source_file=file_path.name)
+                        )
+                    except Exception as exc:
+                        print(f"Skipped empirical extraction for {file_path.name}: {exc}")
+                    try:
+                        regression_rows.extend(
+                            extract_regression_rows(workbook, meta=meta, source_file=file_path.name)
+                        )
+                    except Exception as exc:
+                        print(f"Skipped regression extraction for {file_path.name}: {exc}")
                     processed_files += 1
                 except Exception as exc:
                     print(f"Skipped {file_path.name}: {exc}")
