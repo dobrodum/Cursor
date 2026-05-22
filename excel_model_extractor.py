@@ -244,6 +244,32 @@ def close_source_workbook(wb: Any) -> None:
         pass
 
 
+def unmerge_sheet_cells(ws: Any) -> bool:
+    try:
+        used = ws.used_range
+    except Exception:
+        return False
+
+    try:
+        merge_state = used.merge_cells
+        if merge_state is False:
+            return False
+    except Exception:
+        pass
+
+    try:
+        used.unmerge()
+        return True
+    except Exception:
+        pass
+
+    try:
+        ws.api.UsedRange.UnMerge()
+        return True
+    except Exception:
+        return False
+
+
 def find_anchor(used_start_row: int, used_start_col: int, matrix: List[List[Any]]) -> Optional[Tuple[int, int]]:
     for row_idx, row_values in enumerate(matrix):
         for col_idx, cell_value in enumerate(row_values):
@@ -672,6 +698,16 @@ def main() -> None:
             wb = None
             try:
                 wb = app.books.open(str(file_path), update_links=False)
+                sheet_names = {sheet.name for sheet in wb.sheets}
+                if "Empirical Model" in sheet_names and unmerge_sheet_cells(
+                    wb.sheets["Empirical Model"]
+                ):
+                    print(f"Unmerged cells: {file_path.name} [Empirical Model]")
+                if "Regression Model" in sheet_names and unmerge_sheet_cells(
+                    wb.sheets["Regression Model"]
+                ):
+                    print(f"Unmerged cells: {file_path.name} [Regression Model]")
+
                 empirical_ctx = find_sheet_context(wb, "Empirical Model")
                 regression_ctx = find_sheet_context(wb, "Regression Model")
                 if empirical_ctx is None and regression_ctx is None:
