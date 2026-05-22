@@ -91,7 +91,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--input-dir",
-        default="/Users/mariadobrodum/Desktop/MedMine/untitled folder 2",
+        default="/Users/mariadobrodum/Desktop/MedMine/MedMiner_Models",
     )
     parser.add_argument(
         "--output-dir",
