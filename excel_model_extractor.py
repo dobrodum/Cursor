@@ -261,6 +261,44 @@ def nearest_label_value(
     return to_number(value_map.get((label_row + 1, label_col + 1)))
 
 
+def nearest_label_values(
+    value_map: Dict[Tuple[int, int], Any],
+    anchor: Tuple[int, int],
+    pattern_map: Dict[str, Sequence[str]],
+) -> Dict[str, Optional[float]]:
+    anchor_row, anchor_col = anchor
+    best_hits: Dict[str, Tuple[int, int, int]] = {}
+
+    for (row, col), value in value_map.items():
+        normalized = normalize_text(value)
+        if not normalized:
+            continue
+        for key, patterns in pattern_map.items():
+            if any(pattern in normalized for pattern in patterns):
+                distance = abs(row - anchor_row) + abs(col - anchor_col)
+                prev = best_hits.get(key)
+                if prev is None or distance < prev[0]:
+                    best_hits[key] = (distance, row, col)
+
+    resolved: Dict[str, Optional[float]] = {}
+    for key in pattern_map:
+        if key not in best_hits:
+            resolved[key] = None
+            continue
+        _, label_row, label_col = best_hits[key]
+        right_value = to_number(value_map.get((label_row, label_col + 1)))
+        if right_value is not None:
+            resolved[key] = right_value
+            continue
+        below_value = to_number(value_map.get((label_row + 1, label_col)))
+        if below_value is not None:
+            resolved[key] = below_value
+            continue
+        resolved[key] = to_number(value_map.get((label_row + 1, label_col + 1)))
+
+    return resolved
+
+
 def row_numeric_values(
     value_map: Dict[Tuple[int, int], Any],
     row: int,
@@ -396,12 +434,24 @@ def extract_empirical_candidates(
         sales_series = [sales_map.get(col) for col in quarter_cols]
         sales_series = [v for v in sales_series if v is not None]
 
-    reported_sales_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["reported_sales"])
-    forecast_max_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["forecast_max"])
-    forecast_min_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["forecast_min"])
-    quarterly_sales_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["quarterly_sales"])
-    growth_rate_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["growth_rate_pct"])
-    sales_captured_label = nearest_label_value(value_map, anchor, LABEL_PATTERNS["sales_captured_in_db_pct"])
+    label_values = nearest_label_values(
+        value_map,
+        anchor,
+        {
+            "reported_sales": LABEL_PATTERNS["reported_sales"],
+            "forecast_max": LABEL_PATTERNS["forecast_max"],
+            "forecast_min": LABEL_PATTERNS["forecast_min"],
+            "quarterly_sales": LABEL_PATTERNS["quarterly_sales"],
+            "growth_rate_pct": LABEL_PATTERNS["growth_rate_pct"],
+            "sales_captured_in_db_pct": LABEL_PATTERNS["sales_captured_in_db_pct"],
+        },
+    )
+    reported_sales_label = label_values["reported_sales"]
+    forecast_max_label = label_values["forecast_max"]
+    forecast_min_label = label_values["forecast_min"]
+    quarterly_sales_label = label_values["quarterly_sales"]
+    growth_rate_label = label_values["growth_rate_pct"]
+    sales_captured_label = label_values["sales_captured_in_db_pct"]
 
     latest_sales = sales_series[-1] if sales_series else quarterly_sales_label
     previous_sales = sales_series[-2] if len(sales_series) >= 2 else None
@@ -533,10 +583,20 @@ def extract_regression_candidates(
 
     data_points = data_points[-10:]
 
-    actual_value = nearest_label_value(value_map, anchor, LABEL_PATTERNS["actual_value"])
-    static_tot_fcst = nearest_label_value(value_map, anchor, LABEL_PATTERNS["forecast_value"])
-    static_max = nearest_label_value(value_map, anchor, LABEL_PATTERNS["forecast_max"])
-    static_min = nearest_label_value(value_map, anchor, LABEL_PATTERNS["forecast_min"])
+    label_values = nearest_label_values(
+        value_map,
+        anchor,
+        {
+            "actual_value": LABEL_PATTERNS["actual_value"],
+            "forecast_value": LABEL_PATTERNS["forecast_value"],
+            "forecast_max": LABEL_PATTERNS["forecast_max"],
+            "forecast_min": LABEL_PATTERNS["forecast_min"],
+        },
+    )
+    actual_value = label_values["actual_value"]
+    static_tot_fcst = label_values["forecast_value"]
+    static_max = label_values["forecast_max"]
+    static_min = label_values["forecast_min"]
 
     scratch_intercept = sheet.cells(anchor_row + 2, anchor_col + 2)
     scratch_slope = sheet.cells(anchor_row + 2, anchor_col + 3)
