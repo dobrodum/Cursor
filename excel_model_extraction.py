@@ -13,9 +13,14 @@ try:
 except ImportError:  # pragma: no cover - allows importing file without Excel deps
     xw = None
 
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+except ImportError:  # pragma: no cover - allows importing file without writer deps
+    Workbook = None
+    Font = None
+    get_column_letter = None
 
 
 # -------------------------
@@ -720,6 +725,9 @@ def process_regression_sheet(workbook: Any, metadata: Dict[str, str]) -> List[Di
 
 
 def format_output_sheet(sheet: Any, columns: Sequence[str]) -> None:
+    if Font is None or get_column_letter is None:
+        raise RuntimeError("openpyxl is required to format output sheets.")
+
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
@@ -786,6 +794,8 @@ def collect_source_files(input_path: Path) -> List[Path]:
 def run_extraction() -> None:
     if xw is None:
         raise RuntimeError("xlwings is required to run this script.")
+    if Workbook is None:
+        raise RuntimeError("openpyxl is required to run this script.")
 
     input_path = Path(input_dir).expanduser().resolve()
     output_path = Path(output_dir).expanduser().resolve()
