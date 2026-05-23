@@ -666,7 +666,7 @@ def main() -> None:
 
     try:
         for file_path in iter_source_files(src_dir):
-            print(f"processed file: {file_path.name}")
+            print(f"processing file: {file_path.name}")
             wb = None
             try:
                 wb = app.books.open(str(file_path), update_links=False)
@@ -677,6 +677,7 @@ def main() -> None:
                 empirical_rows.extend(empirical)
                 regression_rows.extend(regression)
                 processed_files += 1
+                print(f"processed file: {file_path.name}")
             except Exception as exc:
                 print(f"  skipped: {file_path.name} (read error: {exc})")
             finally:
