@@ -772,6 +772,12 @@ def main() -> None:
     app = xw.App(visible=False, add_book=False)
     app.display_alerts = False
     app.screen_updating = False
+    previous_calculation_mode: Optional[Any] = None
+    try:
+        previous_calculation_mode = app.calculation
+        app.calculation = "manual"
+    except Exception:
+        previous_calculation_mode = None
 
     try:
         for file_path in iter_source_files(input_dir):
@@ -806,6 +812,11 @@ def main() -> None:
                 if wb is not None:
                     safe_close_source_workbook(wb)
     finally:
+        if previous_calculation_mode is not None:
+            try:
+                app.calculation = previous_calculation_mode
+            except Exception:
+                pass
         app.quit()
 
     write_output_workbook(
