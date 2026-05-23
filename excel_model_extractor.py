@@ -399,7 +399,7 @@ def process_empirical_sheet(
         hist_start = anchor_row - n
         hist_end = anchor_row - 1
         if hist_start < 1 or penetration_col < 1:
-            formulas.append([None])
+            formulas.append([""])
             continue
         formulas.append([f"=AVERAGE(R{hist_start}C{penetration_col}:R{hist_end}C{penetration_col})"])
 
@@ -502,8 +502,8 @@ def process_regression_sheet(
         hist_start = anchor_row - n
         hist_end = anchor_row - 1
         if hist_start < 1 or x_col < 1 or y_col < 1:
-            intercept_formulas.append([None])
-            slope_formulas.append([None])
+            intercept_formulas.append([""])
+            slope_formulas.append([""])
             continue
 
         y_range = f"R{hist_start}C{y_col}:R{hist_end}C{y_col}"
