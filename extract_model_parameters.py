@@ -275,8 +275,21 @@ def close_workbook_safe(workbook: xw.Book) -> None:
 def set_formula2(cell: xw.Range, formula: str) -> None:
     try:
         cell.formula2 = formula
+        return
     except Exception:
-        # Fallback keeps the script usable if Formula2 is not exposed by the local Excel build.
+        pass
+
+    try:
+        cell.api.Formula2R1C1 = formula
+        return
+    except Exception:
+        pass
+
+    try:
+        cell.api.FormulaR1C1 = formula
+        return
+    except Exception:
+        # Last fallback keeps script usable if Formula2* and FormulaR1C1 are unavailable.
         cell.formula = formula
 
 
@@ -596,36 +609,37 @@ def run() -> None:
     regression_rows: list[dict[str, Any]] = []
     processed_files = 0
 
-    app: Optional[xw.App] = None
-    try:
-        app = xw.App(visible=False, add_book=False)
-        app.display_alerts = False
-        app.screen_updating = False
+    if files:
+        app: Optional[xw.App] = None
         try:
-            app.calculation = "manual"
-        except Exception:
-            pass
-
-        for file_path in files:
-            print(f"Processing file: {file_path.name}")
-            workbook: Optional[xw.Book] = None
+            app = xw.App(visible=False, add_book=False)
+            app.display_alerts = False
+            app.screen_updating = False
             try:
-                workbook = app.books.open(str(file_path), update_links=False)
-                meta = parse_filename_metadata(file_path)
-                empirical_rows.extend(process_empirical_sheet(workbook, meta, file_path.name))
-                regression_rows.extend(process_regression_sheet(workbook, meta, file_path.name))
-                processed_files += 1
-            except Exception as exc:
-                print(f"Skipped file: {file_path.name} (processing error: {exc})")
-            finally:
-                if workbook is not None:
-                    close_workbook_safe(workbook)
-    finally:
-        if app is not None:
-            try:
-                app.quit()
+                app.calculation = "manual"
             except Exception:
                 pass
+
+            for file_path in files:
+                print(f"Processing file: {file_path.name}")
+                workbook: Optional[xw.Book] = None
+                try:
+                    workbook = app.books.open(str(file_path), update_links=False)
+                    meta = parse_filename_metadata(file_path)
+                    empirical_rows.extend(process_empirical_sheet(workbook, meta, file_path.name))
+                    regression_rows.extend(process_regression_sheet(workbook, meta, file_path.name))
+                    processed_files += 1
+                except Exception as exc:
+                    print(f"Skipped file: {file_path.name} (processing error: {exc})")
+                finally:
+                    if workbook is not None:
+                        close_workbook_safe(workbook)
+        finally:
+            if app is not None:
+                try:
+                    app.quit()
+                except Exception:
+                    pass
 
     save_output_workbook(output_path, empirical_rows, regression_rows)
 
