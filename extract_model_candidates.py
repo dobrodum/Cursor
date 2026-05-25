@@ -7,10 +7,6 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import xlwings as xw
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
 
 # ---------------------------------------------------------------------------
 # User-configurable paths
@@ -728,6 +724,9 @@ def extract_regression_rows(workbook: Any, meta: Dict[str, str], source_file: st
 
 
 def apply_sheet_formatting(worksheet: Any, columns: Sequence[str]) -> None:
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
     for cell in worksheet[1]:
         cell.font = Font(bold=True)
     worksheet.freeze_panes = "A2"
@@ -749,6 +748,8 @@ def write_output_workbook(
     empirical_rows: List[Dict[str, Any]],
     regression_rows: List[Dict[str, Any]],
 ) -> None:
+    from openpyxl import Workbook
+
     workbook = Workbook()
     empirical_sheet = workbook.active
     empirical_sheet.title = "empirical_candidates"
@@ -771,6 +772,18 @@ def write_output_workbook(
 def main() -> None:
     if not input_dir.exists():
         print(f"Skipped run: input_dir does not exist -> {input_dir.resolve()}")
+        return
+
+    try:
+        import openpyxl  # noqa: F401
+    except ModuleNotFoundError:
+        print("Skipped run: missing dependency 'openpyxl'. Install it and rerun.")
+        return
+
+    try:
+        import xlwings as xw  # type: ignore
+    except ModuleNotFoundError:
+        print("Skipped run: missing dependency 'xlwings'. Install it and rerun.")
         return
 
     output_path = build_output_path(input_dir, output_dir)
