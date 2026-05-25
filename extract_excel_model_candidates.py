@@ -422,7 +422,6 @@ def process_regression_sheet(
         )
 
         signature = (
-            n_quarters,
             intercept,
             slope,
             forecast_value,
