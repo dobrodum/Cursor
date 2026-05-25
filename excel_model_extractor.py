@@ -613,7 +613,6 @@ def main() -> None:
                 print(f"Skipped file: {file_path.name} (not .xlsx)")
                 continue
 
-            print(f"Processed file: {file_path.name}")
             wb: Optional[xw.Book] = None
             try:
                 wb = app.books.open(str(file_path), update_links=False)
@@ -622,6 +621,7 @@ def main() -> None:
                 empirical_rows.extend(process_empirical(wb, metadata, file_path.name))
                 regression_rows.extend(process_regression(wb, metadata, file_path.name))
                 files_processed += 1
+                print(f"Processed file: {file_path.name}")
             except Exception as exc:
                 print(f"Skipped file: {file_path.name} (error: {exc})")
             finally:
