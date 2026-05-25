@@ -18,10 +18,19 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
-from openpyxl.worksheet.worksheet import Worksheet
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.worksheet import Worksheet
+except ModuleNotFoundError as exc:
+    Workbook = None
+    Font = None
+    get_column_letter = None
+    Worksheet = Any
+    _OPENPYXL_IMPORT_ERROR = exc
+else:
+    _OPENPYXL_IMPORT_ERROR = None
 
 try:
     import xlwings as xw
@@ -720,11 +729,11 @@ def write_output_workbook(
 
 
 def main() -> None:
-    if xw is None:
+    if xw is None or Workbook is None or Font is None or get_column_letter is None:
         raise ModuleNotFoundError(
-            "xlwings is required to run this script. Install dependencies with "
+            "xlwings and openpyxl are required to run this script. Install dependencies with "
             "'pip install xlwings openpyxl'."
-        ) from _XLWINGS_IMPORT_ERROR
+        ) from (_XLWINGS_IMPORT_ERROR or _OPENPYXL_IMPORT_ERROR)
 
     if not input_dir.exists():
         raise FileNotFoundError(f"Input directory does not exist: {input_dir}")
