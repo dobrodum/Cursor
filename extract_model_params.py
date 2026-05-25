@@ -293,6 +293,12 @@ def collect_empirical_rows(wb: xw.Book, meta: FileMeta, source_file: str) -> lis
         sales_captured_col,
         penetration_col,
     ]
+    if min(columns) < 1:
+        print(
+            f"Skipping empirical extraction for {source_file} "
+            f"(invalid anchor offsets from column {anchor_col})"
+        )
+        return rows
     data = read_column_block(sheet, history_start_row, history_end_row, columns)
 
     quarter_values = data[quarter_col]
@@ -408,6 +414,12 @@ def collect_regression_rows(wb: xw.Book, meta: FileMeta, source_file: str) -> li
     # Required offsets from anchor.
     y_col = anchor_col - 7
     x_col = anchor_col - 11
+    if x_col < 1 or y_col < 1:
+        print(
+            f"Skipping regression extraction for {source_file} "
+            f"(invalid anchor offsets from column {anchor_col})"
+        )
+        return rows
 
     history_start_row = max(1, history_end_row - n_quarters + 1)
     data = read_column_block(sheet, history_start_row, history_end_row, [x_col, y_col])
