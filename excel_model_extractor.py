@@ -238,12 +238,10 @@ def capture_snapshot(sheet: xw.main.Sheet) -> SheetSnapshot:
 
 def find_anchor(snapshot: SheetSnapshot, label: str = "max") -> Optional[Tuple[int, int]]:
     target = normalize_label(label)
-    best: Optional[Tuple[int, int, int, int]] = None  # (score, abs_row, abs_col, idx)
-    idx = 0
+    best: Optional[Tuple[int, int, int]] = None  # (score, abs_row, abs_col)
     for r_idx, row in enumerate(snapshot.values):
         for c_idx, val in enumerate(row):
             if normalize_label(val) != target:
-                idx += 1
                 continue
             score = 0
             neighbors: List[Tuple[int, int]] = [
@@ -264,10 +262,23 @@ def find_anchor(snapshot: SheetSnapshot, label: str = "max") -> Optional[Tuple[i
                     score += 1
             abs_row = snapshot.base_row + r_idx
             abs_col = snapshot.base_col + c_idx
-            candidate = (score, abs_row, abs_col, idx)
-            if best is None or candidate > best:
+            candidate = (score, abs_row, abs_col)
+            if best is None:
                 best = candidate
-            idx += 1
+                continue
+
+            best_score, best_row, best_col = best
+            cand_score, cand_row, cand_col = candidate
+            if (
+                cand_score > best_score
+                or (cand_score == best_score and cand_row < best_row)
+                or (
+                    cand_score == best_score
+                    and cand_row == best_row
+                    and cand_col < best_col
+                )
+            ):
+                best = candidate
     if best is None:
         return None
     return best[1], best[2]
@@ -298,7 +309,7 @@ def resolve_col(
         key = normalize_label(alias)
         if key in header_map:
             return header_map[key]
-    return anchor_col + default_offset
+    return max(1, anchor_col + default_offset)
 
 
 def is_numeric(value: Any) -> bool:
@@ -311,7 +322,7 @@ def find_contiguous_numeric_rows(
     end_row: int,
     max_scan: int = 120,
 ) -> Tuple[int, int]:
-    if end_row < 1:
+    if end_row < 1 or data_col < 1:
         return 1, 0
 
     r = end_row
@@ -331,6 +342,16 @@ def pull_row_values(sheet: xw.main.Sheet, row: int, col_map: Dict[str, int]) -> 
     for key, col in col_map.items():
         out[key] = safe_value(sheet.range((row, col)).value)
     return out
+
+
+def flatten_numeric(values: Any) -> List[float]:
+    flat: List[float] = []
+    for row in to_2d(values):
+        for cell_value in row:
+            parsed = safe_float(cell_value)
+            if parsed is not None:
+                flat.append(parsed)
+    return flat
 
 
 def extract_empirical_rows(
@@ -524,8 +545,8 @@ def extract_regression_rows(
     header_map = build_header_map(snapshot, anchor_row)
 
     # Required anchor-based offsets.
-    y_col = anchor_col - 7
-    x_col = anchor_col - 11
+    y_col = max(1, anchor_col - 7)
+    x_col = max(1, anchor_col - 11)
 
     num_quarters_col = resolve_col(
         header_map,
@@ -622,7 +643,7 @@ def extract_regression_rows(
             used = min(i + 1, hist_count)
             start_row = hist_end - used + 1
             y_values = sheet.range((start_row, y_col), (hist_end, y_col)).value
-            y_vals = [safe_float(v) for v in to_2d(y_values)[0] if safe_float(v) is not None]
+            y_vals = flatten_numeric(y_values)
             if y_vals:
                 if forecast_max is None:
                     forecast_max = max(y_vals)
@@ -774,7 +795,6 @@ def main() -> None:
 
     try:
         for file_path in files:
-            print(f"processed file: {file_path.name}")
             wb: Optional[xw.main.Book] = None
             try:
                 # Required safe open mode.
@@ -796,6 +816,7 @@ def main() -> None:
                     )
                 )
                 processed_count += 1
+                print(f"processed file: {file_path.name}")
             except Exception as exc:
                 print(f"skipped file: {file_path.name} (error: {exc})")
             finally:
