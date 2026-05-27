@@ -23,7 +23,10 @@ from itertools import count
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import xlwings as xw
+try:
+    import xlwings as xw
+except ModuleNotFoundError:  # pragma: no cover - depends on host environment
+    xw = None
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -670,6 +673,10 @@ def collect_source_files(src_dir: Path) -> List[Path]:
 
 
 def run() -> int:
+    if xw is None:
+        print("Missing dependency: xlwings. Install it with `pip install xlwings`.")
+        return 1
+
     src_dir = input_dir.expanduser().resolve()
     dst_dir = output_dir.expanduser().resolve()
     dst_dir.mkdir(parents=True, exist_ok=True)
