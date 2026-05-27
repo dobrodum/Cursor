@@ -97,14 +97,16 @@ def calculate_range_width(max_value: Any, min_value: Any) -> Optional[float]:
 def to_2d(values: Any) -> List[List[Any]]:
     if values is None:
         return []
-    if not isinstance(values, list):
+    if not isinstance(values, (list, tuple)):
         return [[values]]
-    if not values:
+    rows = list(values)
+    if not rows:
         return []
-    if isinstance(values[0], list):
-        max_len = max(len(row) for row in values)
-        return [row + [None] * (max_len - len(row)) for row in values]
-    return [values]
+    if isinstance(rows[0], (list, tuple)):
+        normalized_rows = [list(row) for row in rows]
+        max_len = max(len(row) for row in normalized_rows)
+        return [row + [None] * (max_len - len(row)) for row in normalized_rows]
+    return [rows]
 
 
 def parse_file_label(file_name: str) -> Dict[str, str]:
