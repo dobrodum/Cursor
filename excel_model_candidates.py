@@ -414,6 +414,16 @@ def process_empirical_sheet(
 
     quarter_col = max(1, penetration_col - 1)
     helper_avg_cell = sheet.cells(anchor_row + 2, anchor_col + 2)
+    direct_estimated = to_float(
+        find_label_value(
+            sheet,
+            labels,
+            "estimated total sold",
+            "est total sold",
+            "forecast total sold",
+        )
+    )
+    range_width = safe_subtract(forecast_max, forecast_min)
 
     max_loops = min(N_QUARTERS, len(penetration_series))
     for n_used in range(1, max_loops + 1):
@@ -431,15 +441,6 @@ def process_empirical_sheet(
 
         # Empirical forecast value = estimated total sold.
         estimated_total_sold = None
-        direct_estimated = to_float(
-            find_label_value(
-                sheet,
-                labels,
-                "estimated total sold",
-                "est total sold",
-                "forecast total sold",
-            )
-        )
         if direct_estimated is not None:
             estimated_total_sold = direct_estimated
         elif reported_sales is not None and avg_penetration_pct not in (None, 0):
@@ -461,7 +462,7 @@ def process_empirical_sheet(
             "actual_value": reported_sales,
             "forecast_max": forecast_max,
             "forecast_min": forecast_min,
-            "range_width": safe_subtract(forecast_max, forecast_min),
+            "range_width": range_width,
             "avg_penetration_pct": avg_penetration_pct,
             "quarterly_sales": quarterly_sales,
             "reported_sales": reported_sales,
@@ -527,6 +528,16 @@ def process_regression_sheet(
     helper_intercept = sheet.cells(anchor_row + 2, anchor_col + 2)
     helper_slope = sheet.cells(anchor_row + 3, anchor_col + 2)
     helper_forecast = sheet.cells(anchor_row + 4, anchor_col + 2)
+    labeled_forecast = to_float(
+        find_label_value(
+            sheet,
+            labels,
+            "tot fcst w/o sa",
+            "total forecast w/o sa",
+            "tot fcst without sa",
+        )
+    )
+    range_width = safe_subtract(forecast_max, forecast_min)
 
     prev_signature: Optional[Tuple[Any, ...]] = None
     max_loops = min(N_QUARTERS, len(xy_series))
@@ -559,15 +570,6 @@ def process_regression_sheet(
         forecast_total_without_sa = to_float(helper_forecast.value)
 
         # Keep workbook-provided TOT FCST w/o SA if available.
-        labeled_forecast = to_float(
-            find_label_value(
-                sheet,
-                labels,
-                "tot fcst w/o sa",
-                "total forecast w/o sa",
-                "tot fcst without sa",
-            )
-        )
         if labeled_forecast is not None:
             forecast_total_without_sa = labeled_forecast
 
@@ -597,7 +599,7 @@ def process_regression_sheet(
             "actual_value": actual_value if actual_value is not None else "",
             "forecast_max": forecast_max,
             "forecast_min": forecast_min,
-            "range_width": safe_subtract(forecast_max, forecast_min),
+            "range_width": range_width,
             "intercept": intercept,
             "slope": slope,
             "source_file": file_path.name,
@@ -652,6 +654,7 @@ def write_output_workbook(
 
 
 def iter_input_files(folder: Path) -> Iterable[Path]:
+    output_name_re = re.compile(r"_param(?:\.\d+)?\.xlsx$", re.IGNORECASE)
     for file_path in sorted(folder.iterdir()):
         if not file_path.is_file():
             continue
@@ -660,6 +663,9 @@ def iter_input_files(folder: Path) -> Iterable[Path]:
             continue
         if file_path.suffix.lower() != ".xlsx":
             print(f"Skipped {file_path.name}: not an .xlsx file")
+            continue
+        if output_name_re.search(file_path.name):
+            print(f"Skipped {file_path.name}: prior PARAM output file")
             continue
         yield file_path
 
@@ -681,6 +687,11 @@ def main() -> None:
     app = xw.App(visible=False, add_book=False)
     app.display_alerts = False
     app.screen_updating = False
+    try:
+        # Optional speed-up if backend supports the calculation mode API.
+        app.api.Calculation = -4135  # xlCalculationManual
+    except Exception:
+        pass
 
     try:
         for file_path in source_files:
