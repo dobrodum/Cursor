@@ -27,9 +27,14 @@ try:
     import xlwings as xw
 except ModuleNotFoundError:  # pragma: no cover - depends on host environment
     xw = None
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+except ModuleNotFoundError:  # pragma: no cover - depends on host environment
+    Workbook = None
+    Font = None
+    get_column_letter = None
 
 # --------------------------
 # User-configurable paths
@@ -673,8 +678,19 @@ def collect_source_files(src_dir: Path) -> List[Path]:
 
 
 def run() -> int:
+    missing_deps: List[str] = []
     if xw is None:
-        print("Missing dependency: xlwings. Install it with `pip install xlwings`.")
+        missing_deps.append("xlwings")
+    if Workbook is None or Font is None or get_column_letter is None:
+        missing_deps.append("openpyxl")
+    if missing_deps:
+        print(
+            "Missing dependency packages: "
+            + ", ".join(missing_deps)
+            + ". Install with `pip install "
+            + " ".join(missing_deps)
+            + "`."
+        )
         return 1
 
     src_dir = input_dir.expanduser().resolve()
