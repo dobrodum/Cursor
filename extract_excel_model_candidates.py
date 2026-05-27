@@ -282,11 +282,13 @@ def extract_empirical_candidates(
     n_quarters = 10
 
     helper_col = snapshot.end_col + 2
+    penetration_source_col = anchor_col + offsets["sales_captured_in_db_pct"]
+    source_rel_col = penetration_source_col - helper_col
     for idx in range(n_quarters):
         row = first_data_row + idx
-        num_col = anchor_col + offsets["quarterly_sales"]
-        den_col = anchor_col + offsets["reported_sales"]
-        formula = f'=IFERROR(RC[{num_col - helper_col}]/RC[{den_col - helper_col}], "")'
+        start_ref = f"R[{-idx}]C[{source_rel_col}]"
+        end_ref = f"RC[{source_rel_col}]"
+        formula = f'=IFERROR(AVERAGE({start_ref}:{end_ref}), "")'
         set_r1c1_formula2(sheet.range((row, helper_col)), formula)
     recalculate(workbook)
 
@@ -310,6 +312,11 @@ def extract_empirical_candidates(
         )
         quarterly_sales = safe_value(snapshot.get(row, anchor_col + offsets["quarterly_sales"]))
         reported_sales = safe_value(snapshot.get(row, anchor_col + offsets["reported_sales"]))
+        if avg_penetration is None:
+            quarterly_sales_num = as_number(quarterly_sales)
+            reported_sales_num = as_number(reported_sales)
+            if quarterly_sales_num is not None and reported_sales_num not in (None, 0):
+                avg_penetration = quarterly_sales_num / reported_sales_num
         growth_rate_pct = safe_value(snapshot.get(row, anchor_col + offsets["growth_rate_pct"]))
         sales_captured_in_db_pct = safe_value(
             snapshot.get(row, anchor_col + offsets["sales_captured_in_db_pct"])
