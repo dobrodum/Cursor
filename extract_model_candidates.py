@@ -451,7 +451,7 @@ def same_regression_row(a: dict[str, Any], b: dict[str, Any], tolerance: float =
             return False
         if abs(av - bv) > tolerance:
             return False
-    return to_int(a.get("num_quarters_used")) == to_int(b.get("num_quarters_used"))
+    return True
 
 
 def process_empirical_sheet(workbook: xw.Book, meta: FileMeta) -> list[dict[str, Any]]:
