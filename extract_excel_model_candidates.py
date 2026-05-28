@@ -199,8 +199,11 @@ def set_formula2(cell: xw.Range, formula_r1c1: str) -> None:
     try:
         cell.formula2 = formula_r1c1
     except Exception:
-        # Fallback for Excel versions without formula2 support.
-        cell.formula = formula_r1c1
+        # Fallbacks for Excel versions without formula2 support.
+        try:
+            cell.api.Formula2R1C1 = formula_r1c1
+        except Exception:
+            cell.api.FormulaR1C1 = formula_r1c1
 
 
 def safe_close_workbook(wb: xw.Book) -> None:
