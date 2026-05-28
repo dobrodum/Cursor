@@ -13,8 +13,8 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
 # Configure these directories before running.
-input_dir = Path("/path/to/input")
-output_dir = Path("/path/to/output")
+input_dir = Path("input")
+output_dir = Path("output")
 
 N_QUARTERS = 10
 
