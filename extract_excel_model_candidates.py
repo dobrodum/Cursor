@@ -375,8 +375,8 @@ def process_empirical_sheet(
         print(f"  skipped empirical in {source_file}: no penetration series found")
         return []
 
-    growth_value = to_float(right_value(sheet, growth_anchor))
-    captured_value = to_float(right_value(sheet, captured_anchor))
+    static_growth_value = to_float(right_value(sheet, growth_anchor))
+    static_captured_value = to_float(right_value(sheet, captured_anchor))
     estimated_total = to_float(right_value(sheet, estimated_anchor))
     static_max = to_float(sheet.cells(anchor_row, value_col).value)
     static_min = to_float(sheet.cells(min_row, value_col).value)
@@ -422,6 +422,8 @@ def process_empirical_sheet(
         if reported_sales is None:
             reported_sales = to_float(right_value(sheet, reported_anchor))
 
+        growth_value = static_growth_value
+        captured_value = static_captured_value
         if growth_value is None and quarterly_sales not in (None, 0) and reported_sales is not None:
             growth_value = (quarterly_sales - reported_sales) / reported_sales if reported_sales else None
         if captured_value is None and quarterly_sales not in (None, 0) and reported_sales is not None:
@@ -655,6 +657,11 @@ def main() -> None:
         except Exception:
             pass
 
+        generated_output_pattern = re.compile(
+            rf"^{re.escape(input_dir.name)}_PARAM(?:\.\d+)?\.xlsx$",
+            re.IGNORECASE,
+        )
+
         for file_path in sorted(input_dir.iterdir()):
             if not file_path.is_file():
                 print(f"skipped: {file_path.name} (not a file)")
@@ -665,21 +672,30 @@ def main() -> None:
             if file_path.suffix.lower() != ".xlsx":
                 print(f"skipped: {file_path.name} (not an .xlsx file)")
                 continue
+            if generated_output_pattern.match(file_path.name):
+                print(f"skipped: {file_path.name} (generated output workbook)")
+                continue
 
             workbook: xw.Book | None = None
             try:
                 workbook = app.books.open(str(file_path), update_links=False)
                 label = parse_file_label(file_path.name)
 
-                empirical_sheet = workbook.sheets["Empirical Model"]
-                regression_sheet = workbook.sheets["Regression Model"]
+                try:
+                    empirical_sheet = workbook.sheets["Empirical Model"]
+                    empirical_rows.extend(
+                        process_empirical_sheet(workbook, empirical_sheet, label, file_path.name)
+                    )
+                except Exception as exc:
+                    print(f"  skipped empirical in {file_path.name}: {exc}")
 
-                empirical_rows.extend(
-                    process_empirical_sheet(workbook, empirical_sheet, label, file_path.name)
-                )
-                regression_rows.extend(
-                    process_regression_sheet(workbook, regression_sheet, label, file_path.name)
-                )
+                try:
+                    regression_sheet = workbook.sheets["Regression Model"]
+                    regression_rows.extend(
+                        process_regression_sheet(workbook, regression_sheet, label, file_path.name)
+                    )
+                except Exception as exc:
+                    print(f"  skipped regression in {file_path.name}: {exc}")
 
                 processed_files += 1
                 print(f"processed: {file_path.name}")
