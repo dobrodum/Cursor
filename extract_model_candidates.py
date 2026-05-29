@@ -296,14 +296,16 @@ def extract_empirical_candidates(
     headers, _, _ = build_header_map(sheet, anchor_row)
 
     max_col = anchor_col
-    min_col = find_column(headers, ["min"], anchor_col) or (anchor_col + 1)
+    min_col = find_column(headers, ["min"], anchor_col) or max(anchor_col + 1, 1)
     num_quarters_col = find_column(
         headers, ["num quarters used", "num quarters", "quarters used", "n quarters"], anchor_col
+    ) or max(anchor_col - 5, 1)
+    last_quarter_col = find_column(headers, ["last quarter used", "last quarter"], anchor_col) or max(
+        anchor_col - 4, 1
     )
-    last_quarter_col = find_column(headers, ["last quarter used", "last quarter"], anchor_col)
     avg_penetration_col = find_column(
         headers, ["avg penetration pct", "average penetration", "avg penetration"], anchor_col
-    )
+    ) or max(anchor_col - 3, 1)
     forecast_col = find_column(
         headers,
         [
@@ -314,14 +316,18 @@ def extract_empirical_candidates(
             "tot fcst",
         ],
         anchor_col,
+    ) or max(anchor_col - 2, 1)
+    actual_col = find_column(headers, ["reported sales", "actual value", "actual"], anchor_col) or max(
+        anchor_col - 1, 1
     )
-    actual_col = find_column(headers, ["reported sales", "actual value", "actual"], anchor_col)
-    quarterly_sales_col = find_column(headers, ["quarterly sales"], anchor_col)
+    quarterly_sales_col = find_column(headers, ["quarterly sales"], anchor_col) or max(anchor_col - 8, 1)
     reported_sales_col = find_column(headers, ["reported sales"], anchor_col) or actual_col
-    growth_rate_col = find_column(headers, ["growth rate pct", "growth rate"], anchor_col)
+    growth_rate_col = find_column(headers, ["growth rate pct", "growth rate"], anchor_col) or max(
+        anchor_col - 7, 1
+    )
     sales_captured_col = find_column(
         headers, ["sales captured in db pct", "captured in db", "sales captured"], anchor_col
-    )
+    ) or max(anchor_col - 6, 1)
 
     formulas_written = False
     if avg_penetration_col is not None:
@@ -429,17 +435,17 @@ def extract_regression_candidates(
     x_col = max(anchor_col - 11, 1)
 
     max_col = anchor_col
-    min_col = find_column(headers, ["min"], anchor_col) or (anchor_col + 1)
+    min_col = find_column(headers, ["min"], anchor_col) or max(anchor_col + 1, 1)
     num_quarters_col = find_column(
         headers, ["num quarters used", "num quarters", "quarters used", "n quarters"], anchor_col
-    )
-    intercept_col = find_column(headers, ["intercept"], anchor_col)
-    slope_col = find_column(headers, ["slope"], anchor_col)
+    ) or max(anchor_col - 6, 1)
+    intercept_col = find_column(headers, ["intercept"], anchor_col) or max(anchor_col - 4, 1)
+    slope_col = find_column(headers, ["slope"], anchor_col) or max(anchor_col - 3, 1)
     forecast_col = find_column(
         headers,
         ["tot fcst w/o sa", "tot fcst without sa", "forecast total without sa", "tot fcst"],
         anchor_col,
-    )
+    ) or max(anchor_col - 1, 1)
     actual_col = find_column(headers, ["actual value", "actual", "reported sales"], anchor_col)
 
     block = detect_numeric_block(sheet, y_col, anchor_row - 1)
