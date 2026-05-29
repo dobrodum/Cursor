@@ -148,10 +148,14 @@ def to_number(value: Any) -> float | None:
     if not text:
         return None
     text = text.replace(",", "")
-    if text.endswith("%"):
+    was_percent = text.endswith("%")
+    if was_percent:
         text = text[:-1]
     try:
-        return float(text)
+        parsed = float(text)
+        if was_percent:
+            return parsed / 100.0
+        return parsed
     except ValueError:
         return None
 
@@ -372,14 +376,13 @@ def build_empirical_rows(wb: xw.Book, ws: xw.Sheet, labels: ModelLabel, source_f
     cols = resolve_cols(anchor_col=anchor_col, detected=detected, defaults=EMPIRICAL_DEFAULT_OFFSETS)
     helper_col = anchor_col + 6
 
-    quarter_end_col = anchor_col - 11
-    quarter_window = 10
+    quarter_end_col = max(1, anchor_col - 11)
 
     # Write average-penetration formulas once, then calculate once.
     formula_rows: list[int] = []
     for n_quarters in range(1, 11):
         row = anchor_row + n_quarters
-        quarter_start_col = quarter_end_col - (n_quarters - 1)
+        quarter_start_col = max(1, quarter_end_col - (n_quarters - 1))
         formula = f"=AVERAGE(R{row}C{quarter_start_col}:R{row}C{quarter_end_col})"
         set_formula2(ws.range((row, helper_col)), formula)
         formula_rows.append(row)
