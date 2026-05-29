@@ -82,11 +82,11 @@ WINDOW_DAY_MAP = {"Early": 5, "Mid": 15, "Late": 25}
 def normalize_2d(values: Any) -> List[List[Any]]:
     if values is None:
         return []
-    if not isinstance(values, list):
+    if not isinstance(values, (list, tuple)):
         return [[values]]
-    if values and not isinstance(values[0], list):
-        return [values]
-    return values
+    if values and not isinstance(values[0], (list, tuple)):
+        return [list(values)]
+    return [list(row) for row in values]
 
 
 def to_float(value: Any) -> Optional[float]:
@@ -372,7 +372,10 @@ def safe_close_workbook(wb: Optional[xw.Book]) -> None:
     try:
         wb.api.Close(SaveChanges=False)
     except Exception:
-        wb.api.Close(False)
+        try:
+            wb.api.Close(False)
+        except Exception:
+            pass
 
 
 def extract_empirical_rows(
@@ -529,16 +532,31 @@ def extract_empirical_rows(
 
 
 def regression_data_rows(
-    sheet: xw.Sheet,
+    values_2d: List[List[Any]],
     start_row: int,
     end_row: int,
+    start_col: int,
     x_col: int,
     y_col: int,
 ) -> List[int]:
     valid_rows: List[int] = []
+    if end_row < start_row:
+        return valid_rows
+
+    x_local = x_col - start_col
+    y_local = y_col - start_col
+    if x_local < 0 or y_local < 0:
+        return valid_rows
+
     for row in range(start_row, end_row + 1):
-        x_val = to_float(sheet.range((row, x_col)).value)
-        y_val = to_float(sheet.range((row, y_col)).value)
+        local_row = row - start_row
+        if not (0 <= local_row < len(values_2d)):
+            continue
+        row_vals = values_2d[local_row]
+        if x_local >= len(row_vals) or y_local >= len(row_vals):
+            continue
+        x_val = to_float(row_vals[x_local])
+        y_val = to_float(row_vals[y_local])
         if x_val is not None and y_val is not None:
             valid_rows.append(row)
     return valid_rows
@@ -582,7 +600,7 @@ def extract_regression_rows(
     fcst_label = find_nearest_text_cell(text_index, anchor_row, anchor_col, ["tot", "fcst", "w/o", "sa"])
     forecast_cell = sheet.range((fcst_label[0], fcst_label[1] + 1)) if fcst_label else None
 
-    rows = regression_data_rows(sheet, start_row, anchor_row - 1, x_col, y_col)
+    rows = regression_data_rows(values_2d, start_row, anchor_row - 1, start_col, x_col, y_col)
     if len(rows) < 2:
         return []
 
@@ -734,6 +752,10 @@ def run() -> None:
         app = xw.App(visible=False, add_book=False)
         app.display_alerts = False
         app.screen_updating = False
+        try:
+            app.calculation = "manual"
+        except Exception:
+            pass
 
         for file_path, skip_reason in iter_candidate_files(input_dir):
             if file_path is None:
@@ -745,9 +767,16 @@ def run() -> None:
             try:
                 wb = app.books.open(str(file_path), update_links=False)
                 meta = parse_file_metadata(file_path.name)
-
-                file_empirical = extract_empirical_rows(wb, meta, file_path.name)
-                file_regression = extract_regression_rows(wb, meta, file_path.name)
+                file_empirical: List[Dict[str, Any]] = []
+                file_regression: List[Dict[str, Any]] = []
+                try:
+                    file_empirical = extract_empirical_rows(wb, meta, file_path.name)
+                except Exception as exc:
+                    print(f"skipped empirical in {file_path.name}: {exc}")
+                try:
+                    file_regression = extract_regression_rows(wb, meta, file_path.name)
+                except Exception as exc:
+                    print(f"skipped regression in {file_path.name}: {exc}")
 
                 empirical_rows.extend(file_empirical)
                 regression_rows.extend(file_regression)
