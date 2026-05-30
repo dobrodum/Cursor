@@ -264,6 +264,17 @@ def get_column(
     return max(1, anchor_col + fallback_offset)
 
 
+def get_column_if_present(
+    header_index: Dict[str, int],
+    aliases: Sequence[str],
+) -> Optional[int]:
+    for alias in aliases:
+        key = normalize_header(alias)
+        if key in header_index:
+            return header_index[key]
+    return None
+
+
 def read_column(sheet: xw.Sheet, col: int, row_start: int, row_end: int) -> List[Any]:
     if col < 1 or row_end < row_start:
         return [None] * max(0, row_end - row_start + 1)
@@ -556,7 +567,10 @@ def extract_regression_rows(
     )
     max_col = anchor_col
     min_col = get_column(header_index, ["min", "forecast min"], anchor_col, 1)
-    actual_col = get_column(header_index, ["actual value", "actual", "reported sales"], anchor_col, -3)
+    actual_col = get_column_if_present(
+        header_index,
+        ["actual value", "actual", "reported sales"],
+    )
 
     row_start = anchor_row + 1
     row_end = row_start + N_QUARTERS - 1
@@ -580,7 +594,10 @@ def extract_regression_rows(
     forecast_values = read_column(sheet, forecast_col, row_start, row_end)
     max_values = read_column(sheet, max_col, row_start, row_end)
     min_values = read_column(sheet, min_col, row_start, row_end)
-    actual_values = read_column(sheet, actual_col, row_start, row_end)
+    if actual_col is None:
+        actual_values = [None] * N_QUARTERS
+    else:
+        actual_values = read_column(sheet, actual_col, row_start, row_end)
     intercept_values = read_column(sheet, intercept_col, row_start, row_end)
     slope_values = read_column(sheet, slope_col, row_start, row_end)
 
