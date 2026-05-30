@@ -312,6 +312,7 @@ def locate_avg_pen_target(
 def detect_empirical_columns(
     values: List[List[Any]],
     start_row: int,
+    start_col: int,
     anchor_row: int,
     anchor_col: int,
 ) -> Dict[str, int]:
@@ -352,7 +353,7 @@ def detect_empirical_columns(
             text = normalize_text(cell)
             if not text:
                 continue
-            abs_col = c_idx + 1
+            abs_col = start_col + c_idx
             for key, terms in search_terms.items():
                 if key in col_map:
                     continue
@@ -396,7 +397,7 @@ def process_empirical_sheet(
     max_value_cell = sheet.range((anchor_row, anchor_col + 1))
     min_value_cell = sheet.range((min_row, anchor_col + 1))
 
-    col_map = detect_empirical_columns(values, start_row, anchor_row, anchor_col)
+    col_map = detect_empirical_columns(values, start_row, start_col, anchor_row, anchor_col)
 
     data_start = start_row
     data_end = anchor_row - 1
