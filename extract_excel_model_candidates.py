@@ -20,8 +20,8 @@ except ImportError as exc:
 
 
 # User-configurable paths
-input_dir = Path("/path/to/input")
-output_dir = Path("/path/to/output")
+input_dir = Path("./input")
+output_dir = Path("./output")
 
 
 EMPIRICAL_COLUMNS = [
