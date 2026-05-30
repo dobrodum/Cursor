@@ -95,16 +95,9 @@ class FileLabel:
     model_date: str
 
 
-def as_2d(values: Any) -> list[list[Any]]:
-    if values is None:
-        return []
-    if isinstance(values, list):
-        if not values:
-            return []
-        if isinstance(values[0], list):
-            return values
-        return [values]
-    return [[values]]
+def read_range_2d(rng: xw.Range) -> list[list[Any]]:
+    values = rng.options(ndim=2).value
+    return values or []
 
 
 def normalize_text(value: Any) -> str:
@@ -159,7 +152,7 @@ def find_anchor_max(sheet: xw.Sheet) -> tuple[int, int] | None:
     used = sheet.used_range
     first_row = used.row
     first_col = used.column
-    matrix = as_2d(used.value)
+    matrix = read_range_2d(used)
     for r_idx, row in enumerate(matrix):
         for c_idx, cell in enumerate(row):
             if normalize_text(cell) == "max":
@@ -239,15 +232,17 @@ def extract_empirical_candidates(
         sheet.range((row, helper_col)).formula2 = avg_formula
 
     wb.app.calculate()
-    avg_values = sheet.range((anchor_row + 1, helper_col), (anchor_row + n_quarters, helper_col)).value
-    avg_values = as_2d(avg_values)
+    avg_values = read_range_2d(
+        sheet.range((anchor_row + 1, helper_col), (anchor_row + n_quarters, helper_col))
+    )
 
     table_start_row = anchor_row + 1
     table_end_row = anchor_row + n_quarters
     table_start_col = anchor_col - 12
     table_end_col = anchor_col + 1
-    table_values = sheet.range((table_start_row, table_start_col), (table_end_row, table_end_col)).value
-    table_values = as_2d(table_values)
+    table_values = read_range_2d(
+        sheet.range((table_start_row, table_start_col), (table_end_row, table_end_col))
+    )
 
     rows: list[dict[str, Any]] = []
     last_quarter_used = infer_last_quarter(sheet, anchor_row, anchor_col)
@@ -345,23 +340,26 @@ def extract_regression_candidates(
         sheet.range((row, helper_slope_col)).formula2 = slope_formula
 
     wb.app.calculate()
-    intercept_values = sheet.range(
-        (anchor_row + 1, helper_intercept_col),
-        (anchor_row + n_quarters, helper_intercept_col),
-    ).value
-    slope_values = sheet.range(
-        (anchor_row + 1, helper_slope_col),
-        (anchor_row + n_quarters, helper_slope_col),
-    ).value
-    intercept_values = as_2d(intercept_values)
-    slope_values = as_2d(slope_values)
+    intercept_values = read_range_2d(
+        sheet.range(
+            (anchor_row + 1, helper_intercept_col),
+            (anchor_row + n_quarters, helper_intercept_col),
+        )
+    )
+    slope_values = read_range_2d(
+        sheet.range(
+            (anchor_row + 1, helper_slope_col),
+            (anchor_row + n_quarters, helper_slope_col),
+        )
+    )
 
     table_start_row = anchor_row + 1
     table_end_row = anchor_row + n_quarters
     table_start_col = anchor_col - 12
     table_end_col = anchor_col + 1
-    table_values = sheet.range((table_start_row, table_start_col), (table_end_row, table_end_col)).value
-    table_values = as_2d(table_values)
+    table_values = read_range_2d(
+        sheet.range((table_start_row, table_start_col), (table_end_row, table_end_col))
+    )
 
     rows: list[dict[str, Any]] = []
     prev_signature: tuple[Any, ...] | None = None
