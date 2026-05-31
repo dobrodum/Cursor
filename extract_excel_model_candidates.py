@@ -108,7 +108,7 @@ def normalize_label(value: Any) -> str:
 
 
 def is_number(value: Any) -> bool:
-    return isinstance(value, (int, float)) and value is not None
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value is not None
 
 
 def to_float(value: Any) -> float | None:
@@ -180,19 +180,8 @@ def read_sheet_grid(sheet: xw.main.Sheet) -> SheetGrid:
     used = sheet.used_range
     start_row = used.row
     start_col = used.column
-    values = used.value
-
-    if values is None:
-        rows = [[None]]
-    elif isinstance(values, list):
-        if not values:
-            rows = [[None]]
-        elif isinstance(values[0], list):
-            rows = [list(row) for row in values]
-        else:
-            rows = [list(values)]
-    else:
-        rows = [[values]]
+    values = used.options(ndim=2).value
+    rows = [list(row) for row in values] if values else [[None]]
 
     height = len(rows)
     width = max(len(row) for row in rows)
@@ -391,11 +380,17 @@ def build_empirical_rows(
         ["avg penetration", "average penetration", "avg pen"],
         anchor_col - 6,
     )
-    penetration_input_col = find_col_by_header(
-        header_map,
-        ["penetration", "pen pct", "penetration pct"],
-        anchor_col - 9,
-    )
+    penetration_input_col = anchor_col - 9
+    for label, cols in header_map.items():
+        if "penetration" in label and "avg" not in label and "average" not in label:
+            penetration_input_col = cols[0]
+            break
+    if penetration_input_col == anchor_col - 9:
+        penetration_input_col = find_col_by_header(
+            header_map,
+            ["penetration pct", "pen pct", "penetration"],
+            anchor_col - 9,
+        )
     num_quarters_col = find_col_by_header(
         header_map,
         ["num quarters", "quarters used", "n quarters"],
@@ -619,7 +614,6 @@ def build_regression_rows(
             range_width = max_float - min_float
 
         signature = (
-            num_quarters_used,
             round_or_none(intercept_value),
             round_or_none(slope_value),
             round_or_none(forecast_value),
