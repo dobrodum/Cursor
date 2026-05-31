@@ -14,9 +14,17 @@ try:
     import xlwings as xw
 except ImportError:  # pragma: no cover - import guard for environments without Excel tooling
     xw = None  # type: ignore[assignment]
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+except ImportError:  # pragma: no cover - import guard for environments without Excel tooling
+    Workbook = None  # type: ignore[assignment]
+    Font = None  # type: ignore[assignment]
+
+    def get_column_letter(_index: int) -> str:
+        raise RuntimeError("openpyxl is required to write output workbooks.")
 
 
 # =========================
@@ -622,6 +630,9 @@ def should_skip_file(file_path: Path) -> Optional[str]:
 def main() -> None:
     if xw is None:
         print("Missing dependency: xlwings. Install it with `pip install xlwings`.")
+        return
+    if Workbook is None or Font is None:
+        print("Missing dependency: openpyxl. Install it with `pip install openpyxl`.")
         return
 
     if not input_dir.exists():
