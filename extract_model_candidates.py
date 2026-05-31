@@ -10,7 +10,10 @@ import math
 import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-import xlwings as xw
+try:
+    import xlwings as xw
+except ImportError:  # pragma: no cover - import guard for environments without Excel tooling
+    xw = None  # type: ignore[assignment]
 from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
@@ -617,6 +620,10 @@ def should_skip_file(file_path: Path) -> Optional[str]:
 
 
 def main() -> None:
+    if xw is None:
+        print("Missing dependency: xlwings. Install it with `pip install xlwings`.")
+        return
+
     if not input_dir.exists():
         print(f"Input directory does not exist: {input_dir}")
         return
