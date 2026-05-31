@@ -900,7 +900,6 @@ def extract_all(input_folder: Path, output_folder: Path) -> Path:
             pass
 
         for file_path in source_files:
-            print(f"processed file: {file_path.name}")
             model_info = parse_filename_info(file_path.name)
             if model_info is None:
                 print(f"skipped file: {file_path.name} (unable to parse ticker/model period)")
@@ -925,6 +924,7 @@ def extract_all(input_folder: Path, output_folder: Path) -> Path:
                     )
                 )
                 processed_count += 1
+                print(f"processed file: {file_path.name}")
             except Exception as error:
                 print(f"skipped file: {file_path.name} (processing error: {error})")
                 traceback.print_exc()
