@@ -541,6 +541,7 @@ def extract_regression_rows(sheet: Any, labels: FileLabels, source_file: str) ->
     slope_col = anchor_col + REG_SLOPE_COL_OFFSET
 
     row_info: list[tuple[int, int]] = []
+    formula_written = False
     for idx in range(N_QUARTERS):
         row = first_candidate_row + idx
         num_quarters = maybe_int(
@@ -566,10 +567,11 @@ def extract_regression_rows(sheet: Any, labels: FileLabels, source_file: str) ->
                 f"=SLOPE(R[{start_rel}]C[{y_rel_s}]:R[{end_rel}]C[{y_rel_s}],"
                 f"R[{start_rel}]C[{x_rel_s}]:R[{end_rel}]C[{x_rel_s}])"
             )
+            formula_written = True
 
         row_info.append((row, num_quarters))
 
-    if row_info:
+    if formula_written:
         sheet.book.app.calculate()
 
     rows: list[dict[str, Any]] = []
