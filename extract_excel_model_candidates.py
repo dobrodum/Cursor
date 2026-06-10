@@ -733,6 +733,12 @@ def run() -> None:
             "xlwings is required for this workflow. Install with: pip install xlwings"
         ) from exc
 
+    if xw.engines.active is None:
+        raise RuntimeError(
+            "No Excel engine is available for xlwings. "
+            "Run this script on a machine with desktop Excel installed."
+        )
+
     app = xw.App(visible=False, add_book=False)
     app.display_alerts = False
     app.screen_updating = False
