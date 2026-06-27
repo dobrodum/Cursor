@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import calendar
+import math
 import re
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -12,42 +12,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
-# Inputs
-input_dir = Path("/workspace/input")
-output_dir = Path("/workspace/output")
+# Configure these two paths before running.
+input_dir = "/workspace/input"
+output_dir = "/workspace/output"
 
-# Core extraction settings
-N_QUARTERS = 10
-
-# Anchor-based empirical offsets (relative to the located "max" cell)
-EMPIRICAL_OFFSETS = {
-    "quarter_col_delta": -12,
-    "quarterly_sales_col_delta": -11,
-    "reported_sales_col_delta": -10,
-    "growth_rate_col_delta": -9,
-    "sales_captured_col_delta": -8,
-    "penetration_col_delta": -7,
-    "forecast_max_value_col_delta": 1,
-    "forecast_min_row_delta": 1,
-    "forecast_min_value_col_delta": 1,
-    "temp_formula_row_delta": 6,
-    "temp_formula_col_delta": 4,
-}
-
-# Anchor-based regression offsets (relative to the located "max" cell)
-REGRESSION_OFFSETS = {
-    "forecast_max_value_col_delta": 1,
-    "forecast_min_row_delta": 1,
-    "forecast_min_value_col_delta": 1,
-    "forecast_total_row_delta": -2,
-    "forecast_total_col_delta": 1,
-    "actual_value_row_delta": -3,
-    "actual_value_col_delta": 1,
-    "temp_intercept_row_delta": 6,
-    "temp_intercept_col_delta": 4,
-    "temp_slope_row_delta": 7,
-    "temp_slope_col_delta": 4,
-}
 
 EMPIRICAL_HEADERS = [
     "model",
@@ -72,6 +40,7 @@ EMPIRICAL_HEADERS = [
     "source_file",
 ]
 
+
 REGRESSION_HEADERS = [
     "model",
     "ticker",
@@ -91,505 +60,567 @@ REGRESSION_HEADERS = [
     "source_file",
 ]
 
-PERIOD_RE = re.compile(
-    r"(?P<timing>Early|Mid|Late)(?P<month>Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)(?P<year>\d{4})",
-    flags=re.IGNORECASE,
-)
+
+PERIOD_TO_DAY = {"Early": 5, "Mid": 15, "Late": 25}
 
 
 @dataclass(frozen=True)
-class FileMetadata:
+class FileLabels:
     model: str
     ticker: str
     model_period: str
     model_date: str
 
 
-def to_float(value: Any) -> float | None:
+@dataclass(frozen=True)
+class SheetSnapshot:
+    start_row: int
+    start_col: int
+    end_row: int
+    end_col: int
+    values: list[list[Any]]
+
+    def get(self, row: int, col: int) -> Any:
+        if row < self.start_row or col < self.start_col:
+            return None
+        r_idx = row - self.start_row
+        c_idx = col - self.start_col
+        if r_idx < 0 or c_idx < 0:
+            return None
+        if r_idx >= len(self.values):
+            return None
+        row_values = self.values[r_idx]
+        if c_idx >= len(row_values):
+            return None
+        value = row_values[c_idx]
+        if value == "":
+            return None
+        return value
+
+
+def normalize_2d(values: Any) -> list[list[Any]]:
+    if values is None:
+        return []
+    if not isinstance(values, list):
+        return [[values]]
+    if not values:
+        return []
+    if isinstance(values[0], list):
+        return values
+    return [values]
+
+
+def build_sheet_snapshot(sheet: xw.Sheet) -> SheetSnapshot:
+    used = sheet.used_range
+    values = normalize_2d(used.value)
+    if not values:
+        return SheetSnapshot(
+            start_row=used.row,
+            start_col=used.column,
+            end_row=used.row,
+            end_col=used.column,
+            values=[],
+        )
+    max_cols = max(len(row) for row in values)
+    normalized_rows: list[list[Any]] = []
+    for row in values:
+        padded = list(row) + [None] * (max_cols - len(row))
+        normalized_rows.append(padded)
+    return SheetSnapshot(
+        start_row=used.row,
+        start_col=used.column,
+        end_row=used.row + len(normalized_rows) - 1,
+        end_col=used.column + max_cols - 1,
+        values=normalized_rows,
+    )
+
+
+def as_number(value: Any) -> float | None:
     if value is None or value == "":
         return None
-    if isinstance(value, (int, float)):
+    if isinstance(value, bool):
         return float(value)
-    text = str(value).strip().replace(",", "")
-    if not text:
-        return None
-    try:
-        if text.endswith("%"):
-            return float(text[:-1]) / 100.0
-        return float(text)
-    except ValueError:
-        return None
-
-
-def safe_subtract(left: float | None, right: float | None) -> float | None:
-    if left is None or right is None:
-        return None
-    return left - right
-
-
-def safe_divide(numerator: float | None, denominator: float | None) -> float | None:
-    if numerator is None or denominator in (None, 0):
-        return None
-    return numerator / denominator
-
-
-def coalesce(*values: Any) -> Any:
-    for value in values:
-        if value not in (None, ""):
-            return value
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and math.isnan(value):
+            return None
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        text = text.replace(",", "")
+        percent = text.endswith("%")
+        if percent:
+            text = text[:-1].strip()
+        try:
+            numeric = float(text)
+        except ValueError:
+            return None
+        return numeric / 100 if percent else numeric
     return None
 
 
-def parse_file_metadata(file_path: Path) -> FileMetadata | None:
+def as_int(value: Any) -> int | None:
+    number = as_number(value)
+    if number is None:
+        return None
+    return int(round(number))
+
+
+def safe_value(value: Any) -> Any:
+    if value == "":
+        return None
+    return value
+
+
+def set_r1c1_formula2(cell: xw.Range, formula: str) -> None:
+    try:
+        cell.formula2 = formula
+    except Exception:
+        cell.formula = formula
+
+
+def recalculate(workbook: xw.Book) -> None:
+    try:
+        workbook.app.calculate()
+    except Exception:
+        workbook.app.api.Calculate()
+
+
+def safe_close_workbook(workbook: xw.Book) -> None:
+    try:
+        workbook.close(save=False)
+        return
+    except TypeError:
+        try:
+            workbook.close(False)
+            return
+        except Exception:
+            pass
+    except Exception:
+        pass
+    try:
+        workbook.api.Close(SaveChanges=False)
+        return
+    except Exception:
+        pass
+    try:
+        workbook.api.Close(False)
+    except Exception:
+        pass
+
+
+def parse_file_labels(file_path: Path) -> FileLabels:
     stem = file_path.stem
-    parts = [part.strip() for part in stem.split(" - ")]
-    if len(parts) < 3:
-        return None
+    parts = [segment.strip() for segment in stem.split(" - ")]
+    ticker = parts[1].upper() if len(parts) >= 2 and parts[1] else "UNKNOWN"
 
-    ticker = parts[1].upper()
-    period_token = parts[2].split("_")[0]
-    match = PERIOD_RE.search(period_token)
-    if not match:
-        return None
+    period_source = parts[2] if len(parts) >= 3 else stem
+    period_source = period_source.split("_")[0].strip()
+    period_match = re.search(r"(Early|Mid|Late)([A-Za-z]{3,})(\d{4})", period_source, re.IGNORECASE)
 
-    timing = match.group("timing").title()
-    month_abbr = match.group("month").title()
-    year = int(match.group("year"))
-    month = list(calendar.month_abbr).index(month_abbr)
+    if period_match:
+        period_part = period_match.group(1).title()
+        month_abbrev = period_match.group(2)[:3].title()
+        year = int(period_match.group(3))
+        try:
+            month_number = datetime.strptime(month_abbrev, "%b").month
+            day = PERIOD_TO_DAY[period_part]
+            model_period = f"{period_part}{month_abbrev}_{year}"
+            model_date = date(year, month_number, day).isoformat()
+        except ValueError:
+            cleaned_period = re.sub(r"\s+", "_", period_source).strip("_")
+            model_period = cleaned_period or "UnknownPeriod"
+            model_date = ""
+    else:
+        cleaned_period = re.sub(r"\s+", "_", period_source).strip("_")
+        model_period = cleaned_period or "UnknownPeriod"
+        model_date = ""
 
-    day_lookup = {"Early": 5, "Mid": 15, "Late": 25}
-    day = day_lookup[timing]
-
-    model_period = f"{timing}{month_abbr}_{year}"
-    model_date = date(year, month, day).isoformat()
-    model = f"{ticker}_{model_period}"
-
-    return FileMetadata(
-        model=model,
+    return FileLabels(
+        model=f"{ticker}_{model_period}",
         ticker=ticker,
         model_period=model_period,
         model_date=model_date,
     )
 
 
-def next_output_path(input_folder: Path, output_folder: Path) -> Path:
-    output_folder.mkdir(parents=True, exist_ok=True)
-    base_name = f"{input_folder.name}_PARAM"
-
-    candidate = output_folder / f"{base_name}.xlsx"
-    suffix = 1
-    while candidate.exists():
-        candidate = output_folder / f"{base_name}.{suffix}.xlsx"
-        suffix += 1
-    return candidate
+def find_anchor(snapshot: SheetSnapshot, anchor_text: str = "max") -> tuple[int, int] | None:
+    target = anchor_text.strip().lower()
+    for r_idx, row in enumerate(snapshot.values):
+        for c_idx, value in enumerate(row):
+            if isinstance(value, str) and value.strip().lower() == target:
+                return snapshot.start_row + r_idx, snapshot.start_col + c_idx
+    return None
 
 
-def find_anchor(sheet: xw.Sheet, text: str = "max") -> tuple[int, int] | None:
-    # xlValues (-4163), xlWhole (1), xlByRows (1), xlNext (1)
-    anchor = sheet.api.Cells.Find(
-        What=text,
-        LookIn=-4163,
-        LookAt=1,
-        SearchOrder=1,
-        SearchDirection=1,
-        MatchCase=False,
-    )
-    if anchor is None:
-        # Fallback to partial match if the label includes extra text.
-        anchor = sheet.api.Cells.Find(
-            What=text,
-            LookIn=-4163,
-            LookAt=2,
-            SearchOrder=1,
-            SearchDirection=1,
-            MatchCase=False,
-        )
-    if anchor is None:
-        return None
-    return int(anchor.Row), int(anchor.Column)
-
-
-def get_cell_value(sheet: xw.Sheet, row: int, col: int) -> Any:
-    if row < 1 or col < 1:
-        return None
-    return sheet.cells(row, col).value
-
-
-def set_formula2(cell: xw.Range, formula: str) -> None:
-    cell.formula2 = formula
-
-
-def process_empirical_sheet(
-    sheet: xw.Sheet,
-    metadata: FileMetadata,
+def extract_empirical_candidates(
+    workbook: xw.Book,
+    labels: FileLabels,
     source_file: str,
-    app: xw.App,
 ) -> list[dict[str, Any]]:
-    anchor = find_anchor(sheet, "max")
-    if anchor is None:
-        print(f"Skipped empirical extraction for {source_file}: 'max' anchor not found")
+    try:
+        sheet = workbook.sheets["Empirical Model"]
+    except Exception:
+        print(f"Skipped empirical extraction ({source_file}): sheet 'Empirical Model' not found")
         return []
 
+    snapshot = build_sheet_snapshot(sheet)
+    anchor = find_anchor(snapshot, "max")
+    if anchor is None:
+        print(f"Skipped empirical extraction ({source_file}): 'max' anchor not found")
+        return []
     anchor_row, anchor_col = anchor
-    quarter_col = anchor_col + EMPIRICAL_OFFSETS["quarter_col_delta"]
-    quarterly_sales_col = anchor_col + EMPIRICAL_OFFSETS["quarterly_sales_col_delta"]
-    reported_sales_col = anchor_col + EMPIRICAL_OFFSETS["reported_sales_col_delta"]
-    growth_rate_col = anchor_col + EMPIRICAL_OFFSETS["growth_rate_col_delta"]
-    sales_captured_col = anchor_col + EMPIRICAL_OFFSETS["sales_captured_col_delta"]
-    penetration_col = anchor_col + EMPIRICAL_OFFSETS["penetration_col_delta"]
 
-    forecast_max = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row,
-            anchor_col + EMPIRICAL_OFFSETS["forecast_max_value_col_delta"],
-        )
-    )
-    forecast_min = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row + EMPIRICAL_OFFSETS["forecast_min_row_delta"],
-            anchor_col + EMPIRICAL_OFFSETS["forecast_min_value_col_delta"],
-        )
-    )
+    # Offsets are anchored to the 'max' column to avoid repeated sheet scanning.
+    offsets = {
+        "sales_captured_in_db_pct": -8,
+        "growth_rate_pct": -7,
+        "quarterly_sales": -6,
+        "num_quarters_used": -5,
+        "last_quarter_used": -4,
+        "avg_penetration_pct": -3,
+        "reported_sales": -2,
+        "forecast_value": -1,
+        "forecast_max": 0,
+        "forecast_min": 1,
+    }
 
-    end_row = anchor_row - 1
-    temp_formula_cell = sheet.cells(
-        anchor_row + EMPIRICAL_OFFSETS["temp_formula_row_delta"],
-        anchor_col + EMPIRICAL_OFFSETS["temp_formula_col_delta"],
-    )
+    first_data_row = anchor_row + 1
+    n_quarters = 10
+
+    helper_col = snapshot.end_col + 2
+    penetration_source_col = anchor_col + offsets["sales_captured_in_db_pct"]
+    source_rel_col = penetration_source_col - helper_col
+    for idx in range(n_quarters):
+        row = first_data_row + idx
+        start_ref = f"R[{-idx}]C[{source_rel_col}]"
+        end_ref = f"RC[{source_rel_col}]"
+        formula = f'=IFERROR(AVERAGE({start_ref}:{end_ref}), "")'
+        set_r1c1_formula2(sheet.range((row, helper_col)), formula)
+    recalculate(workbook)
+
+    helper_values = [
+        safe_value(sheet.range((first_data_row + idx, helper_col)).value) for idx in range(n_quarters)
+    ]
+    sheet.range((first_data_row, helper_col), (first_data_row + n_quarters - 1, helper_col)).clear_contents()
 
     rows: list[dict[str, Any]] = []
-    for num_quarters in range(1, N_QUARTERS + 1):
-        start_row = end_row - num_quarters + 1
-        if start_row < 1:
+    for idx in range(n_quarters):
+        row = first_data_row + idx
+        num_quarters = as_int(snapshot.get(row, anchor_col + offsets["num_quarters_used"])) or (idx + 1)
+        last_quarter_used = safe_value(snapshot.get(row, anchor_col + offsets["last_quarter_used"]))
+        forecast_value = safe_value(snapshot.get(row, anchor_col + offsets["forecast_value"]))
+        actual_value = safe_value(snapshot.get(row, anchor_col + offsets["reported_sales"]))
+        forecast_max = safe_value(snapshot.get(row, anchor_col + offsets["forecast_max"]))
+        forecast_min = safe_value(snapshot.get(row, anchor_col + offsets["forecast_min"]))
+        avg_penetration_existing = safe_value(snapshot.get(row, anchor_col + offsets["avg_penetration_pct"]))
+        avg_penetration = (
+            avg_penetration_existing if avg_penetration_existing is not None else helper_values[idx]
+        )
+        quarterly_sales = safe_value(snapshot.get(row, anchor_col + offsets["quarterly_sales"]))
+        reported_sales = safe_value(snapshot.get(row, anchor_col + offsets["reported_sales"]))
+        if avg_penetration is None:
+            quarterly_sales_num = as_number(quarterly_sales)
+            reported_sales_num = as_number(reported_sales)
+            if quarterly_sales_num is not None and reported_sales_num not in (None, 0):
+                avg_penetration = quarterly_sales_num / reported_sales_num
+        growth_rate_pct = safe_value(snapshot.get(row, anchor_col + offsets["growth_rate_pct"]))
+        sales_captured_in_db_pct = safe_value(
+            snapshot.get(row, anchor_col + offsets["sales_captured_in_db_pct"])
+        )
+
+        if all(
+            value is None
+            for value in (
+                forecast_value,
+                actual_value,
+                forecast_max,
+                forecast_min,
+                avg_penetration,
+                quarterly_sales,
+            )
+        ):
             continue
 
-        avg_formula = (
-            f"=AVERAGE(R{start_row}C{penetration_col}:R{end_row}C{penetration_col})"
+        max_num = as_number(forecast_max)
+        min_num = as_number(forecast_min)
+        range_width = max_num - min_num if max_num is not None and min_num is not None else None
+
+        rows.append(
+            {
+                "model": labels.model,
+                "ticker": labels.ticker,
+                "model_period": labels.model_period,
+                "model_date": labels.model_date,
+                "method": "empirical",
+                "parameter_name": "avg_penetration_pct",
+                "parameter_value": avg_penetration,
+                "num_quarters_used": num_quarters,
+                "last_quarter_used": last_quarter_used,
+                "forecast_value": forecast_value,
+                "actual_value": actual_value,
+                "forecast_max": forecast_max,
+                "forecast_min": forecast_min,
+                "range_width": range_width,
+                "avg_penetration_pct": avg_penetration,
+                "quarterly_sales": quarterly_sales,
+                "reported_sales": reported_sales,
+                "growth_rate_pct": growth_rate_pct,
+                "sales_captured_in_db_pct": sales_captured_in_db_pct,
+                "source_file": source_file,
+            }
         )
-        set_formula2(temp_formula_cell, avg_formula)
-        app.calculate()
-        avg_penetration_pct = to_float(temp_formula_cell.value)
-
-        last_quarter_used = get_cell_value(sheet, end_row, quarter_col)
-        quarterly_sales = to_float(get_cell_value(sheet, end_row, quarterly_sales_col))
-        reported_sales = to_float(get_cell_value(sheet, end_row, reported_sales_col))
-        growth_rate_pct = to_float(get_cell_value(sheet, end_row, growth_rate_col))
-        sales_captured_pct = to_float(get_cell_value(sheet, end_row, sales_captured_col))
-
-        forecast_value = safe_divide(quarterly_sales, avg_penetration_pct)
-        actual_value = reported_sales
-        row = {
-            "model": metadata.model,
-            "ticker": metadata.ticker,
-            "model_period": metadata.model_period,
-            "model_date": metadata.model_date,
-            "method": "empirical",
-            "parameter_name": "avg_penetration_pct",
-            "parameter_value": avg_penetration_pct,
-            "num_quarters_used": num_quarters,
-            "last_quarter_used": last_quarter_used,
-            "forecast_value": forecast_value,
-            "actual_value": actual_value,
-            "forecast_max": forecast_max,
-            "forecast_min": forecast_min,
-            "range_width": safe_subtract(forecast_max, forecast_min),
-            "avg_penetration_pct": avg_penetration_pct,
-            "quarterly_sales": quarterly_sales,
-            "reported_sales": reported_sales,
-            "growth_rate_pct": growth_rate_pct,
-            "sales_captured_in_db_pct": sales_captured_pct,
-            "source_file": source_file,
-        }
-        rows.append(row)
-
-    temp_formula_cell.clear_contents()
     return rows
 
 
-def process_regression_sheet(
-    sheet: xw.Sheet,
-    metadata: FileMetadata,
+def extract_regression_candidates(
+    workbook: xw.Book,
+    labels: FileLabels,
     source_file: str,
-    app: xw.App,
 ) -> list[dict[str, Any]]:
-    anchor = find_anchor(sheet, "max")
-    if anchor is None:
-        print(f"Skipped regression extraction for {source_file}: 'max' anchor not found")
+    try:
+        sheet = workbook.sheets["Regression Model"]
+    except Exception:
+        print(f"Skipped regression extraction ({source_file}): sheet 'Regression Model' not found")
         return []
 
+    snapshot = build_sheet_snapshot(sheet)
+    anchor = find_anchor(snapshot, "max")
+    if anchor is None:
+        print(f"Skipped regression extraction ({source_file}): 'max' anchor not found")
+        return []
     anchor_row, anchor_col = anchor
+
+    # Required anchored source columns from existing model layout.
     y_col = anchor_col - 7
     x_col = anchor_col - 11
-    end_row = anchor_row - 1
 
-    forecast_max = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row,
-            anchor_col + REGRESSION_OFFSETS["forecast_max_value_col_delta"],
-        )
-    )
-    forecast_min = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row + REGRESSION_OFFSETS["forecast_min_row_delta"],
-            anchor_col + REGRESSION_OFFSETS["forecast_min_value_col_delta"],
-        )
-    )
+    history_rows: list[int] = []
+    for row in range(anchor_row - 1, snapshot.start_row - 1, -1):
+        y_val = as_number(snapshot.get(row, y_col))
+        x_val = as_number(snapshot.get(row, x_col))
+        if y_val is not None and x_val is not None:
+            history_rows.append(row)
+        elif history_rows:
+            break
+    history_rows.reverse()
 
-    forecast_total_without_sa = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row + REGRESSION_OFFSETS["forecast_total_row_delta"],
-            anchor_col + REGRESSION_OFFSETS["forecast_total_col_delta"],
-        )
-    )
-    actual_value = to_float(
-        get_cell_value(
-            sheet,
-            anchor_row + REGRESSION_OFFSETS["actual_value_row_delta"],
-            anchor_col + REGRESSION_OFFSETS["actual_value_col_delta"],
-        )
-    )
+    max_n = min(10, len(history_rows))
+    if max_n < 2:
+        print(f"Skipped regression extraction ({source_file}): not enough x/y history for INTERCEPT/SLOPE")
+        return []
 
-    intercept_cell = sheet.cells(
-        anchor_row + REGRESSION_OFFSETS["temp_intercept_row_delta"],
-        anchor_col + REGRESSION_OFFSETS["temp_intercept_col_delta"],
-    )
-    slope_cell = sheet.cells(
-        anchor_row + REGRESSION_OFFSETS["temp_slope_row_delta"],
-        anchor_col + REGRESSION_OFFSETS["temp_slope_col_delta"],
-    )
+    offsets = {
+        "num_quarters_used": -5,
+        "actual_value": -2,
+        "forecast_value": -1,  # TOT FCST w/o SA
+        "forecast_max": 0,
+        "forecast_min": 1,
+    }
+
+    first_data_row = anchor_row + 1
+    intercept_col = snapshot.end_col + 2
+    slope_col = snapshot.end_col + 3
+
+    n_values = list(range(2, max_n + 1))
+    for idx, n in enumerate(n_values):
+        row = first_data_row + idx
+        start_row = history_rows[-n]
+        end_row = history_rows[-1]
+        intercept_formula = (
+            f'=IFERROR(INTERCEPT(R{start_row}C{y_col}:R{end_row}C{y_col}, '
+            f'R{start_row}C{x_col}:R{end_row}C{x_col}), "")'
+        )
+        slope_formula = (
+            f'=IFERROR(SLOPE(R{start_row}C{y_col}:R{end_row}C{y_col}, '
+            f'R{start_row}C{x_col}:R{end_row}C{x_col}), "")'
+        )
+        set_r1c1_formula2(sheet.range((row, intercept_col)), intercept_formula)
+        set_r1c1_formula2(sheet.range((row, slope_col)), slope_formula)
+    recalculate(workbook)
 
     rows: list[dict[str, Any]] = []
     previous_signature: tuple[Any, ...] | None = None
 
-    for num_quarters in range(2, N_QUARTERS + 1):
-        start_row = end_row - num_quarters + 1
-        if start_row < 1:
-            continue
+    for idx, n in enumerate(n_values):
+        row = first_data_row + idx
 
-        intercept_formula = (
-            f"=INTERCEPT(R{start_row}C{y_col}:R{end_row}C{y_col},"
-            f"R{start_row}C{x_col}:R{end_row}C{x_col})"
-        )
-        slope_formula = (
-            f"=SLOPE(R{start_row}C{y_col}:R{end_row}C{y_col},"
-            f"R{start_row}C{x_col}:R{end_row}C{x_col})"
-        )
+        num_quarters_used = as_int(snapshot.get(row, anchor_col + offsets["num_quarters_used"])) or n
+        forecast_value = safe_value(snapshot.get(row, anchor_col + offsets["forecast_value"]))
+        actual_value = safe_value(snapshot.get(row, anchor_col + offsets["actual_value"]))
+        forecast_max = safe_value(snapshot.get(row, anchor_col + offsets["forecast_max"]))
+        forecast_min = safe_value(snapshot.get(row, anchor_col + offsets["forecast_min"]))
+        intercept = safe_value(sheet.range((row, intercept_col)).value)
+        slope = safe_value(sheet.range((row, slope_col)).value)
 
-        set_formula2(intercept_cell, intercept_formula)
-        set_formula2(slope_cell, slope_formula)
-        app.calculate()
-
-        intercept = to_float(intercept_cell.value)
-        slope = to_float(slope_cell.value)
-        latest_x = to_float(get_cell_value(sheet, end_row, x_col))
-        calculated_forecast = (
-            None
-            if intercept is None or slope is None or latest_x is None
-            else intercept + (slope * latest_x)
-        )
-        forecast_value = coalesce(forecast_total_without_sa, calculated_forecast)
+        max_num = as_number(forecast_max)
+        min_num = as_number(forecast_min)
+        range_width = max_num - min_num if max_num is not None and min_num is not None else None
 
         signature = (
-            round(intercept, 8) if intercept is not None else None,
-            round(slope, 8) if slope is not None else None,
-            round(forecast_value, 8) if forecast_value is not None else None,
-            round(forecast_max, 8) if forecast_max is not None else None,
-            round(forecast_min, 8) if forecast_min is not None else None,
+            num_quarters_used,
+            as_number(forecast_value),
+            as_number(forecast_max),
+            as_number(forecast_min),
+            as_number(intercept),
+            as_number(slope),
         )
-        if signature == previous_signature:
+        if previous_signature is not None and signature == previous_signature:
             continue
         previous_signature = signature
 
-        row = {
-            "model": metadata.model,
-            "ticker": metadata.ticker,
-            "model_period": metadata.model_period,
-            "model_date": metadata.model_date,
-            "method": "regression",
-            "parameter_name": "num_quarters_used",
-            "parameter_value": num_quarters,
-            "num_quarters_used": num_quarters,
-            "forecast_value": forecast_value,
-            "actual_value": actual_value,
-            "forecast_max": forecast_max,
-            "forecast_min": forecast_min,
-            "range_width": safe_subtract(forecast_max, forecast_min),
-            "intercept": intercept,
-            "slope": slope,
-            "source_file": source_file,
-        }
-        rows.append(row)
+        rows.append(
+            {
+                "model": labels.model,
+                "ticker": labels.ticker,
+                "model_period": labels.model_period,
+                "model_date": labels.model_date,
+                "method": "regression",
+                "parameter_name": "num_quarters_used",
+                "parameter_value": num_quarters_used,
+                "num_quarters_used": num_quarters_used,
+                "forecast_value": forecast_value,
+                "actual_value": actual_value,
+                "forecast_max": forecast_max,
+                "forecast_min": forecast_min,
+                "range_width": range_width,
+                "intercept": intercept,
+                "slope": slope,
+                "source_file": source_file,
+            }
+        )
 
-    intercept_cell.clear_contents()
-    slope_cell.clear_contents()
+    if n_values:
+        last_formula_row = first_data_row + len(n_values) - 1
+        sheet.range((first_data_row, intercept_col), (last_formula_row, slope_col)).clear_contents()
+
     return rows
 
 
-def ensure_sheet(wb: xw.Book, sheet_name: str) -> xw.Sheet | None:
-    try:
-        return wb.sheets[sheet_name]
-    except Exception:
-        return None
+def choose_output_path(input_path: Path, output_path: Path) -> Path:
+    stem = f"{input_path.name}_PARAM"
+    candidate = output_path / f"{stem}.xlsx"
+    if not candidate.exists():
+        return candidate
+    suffix = 1
+    while True:
+        candidate = output_path / f"{stem}.{suffix}.xlsx"
+        if not candidate.exists():
+            return candidate
+        suffix += 1
 
 
-def close_source_workbook(wb: xw.Book) -> None:
-    try:
-        wb.close(save=False)
-        return
-    except TypeError:
-        pass
-    except Exception:
-        pass
+def write_sheet(
+    workbook: Workbook,
+    name: str,
+    headers: list[str],
+    rows: Iterable[dict[str, Any]],
+) -> None:
+    ws = workbook.create_sheet(title=name)
+    ws.append(headers)
+    for row in rows:
+        ws.append([row.get(header) for header in headers])
 
-    try:
-        wb.api.Close(SaveChanges=False)
-        return
-    except Exception:
-        pass
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
 
-    try:
-        wb.close()
-    except Exception:
-        pass
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:{get_column_letter(ws.max_column)}{ws.max_row}"
 
-
-def autofit_columns(ws, headers: Iterable[str], rows: list[dict[str, Any]]) -> None:
-    for idx, header in enumerate(headers, start=1):
-        width = max(len(header), 12)
-        for row in rows:
-            value = row.get(header)
+    for col_idx in range(1, ws.max_column + 1):
+        header = ws.cell(row=1, column=col_idx).value
+        max_len = len(str(header)) if header is not None else 0
+        for row_idx in range(2, ws.max_row + 1):
+            value = ws.cell(row=row_idx, column=col_idx).value
             if value is None:
                 continue
-            width = max(width, len(str(value)))
-        ws.column_dimensions[get_column_letter(idx)].width = min(width + 2, 60)
+            max_len = max(max_len, len(str(value)))
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max(max_len + 2, 12), 44)
 
 
-def write_output_workbook(
-    output_path: Path,
-    empirical_rows: list[dict[str, Any]],
-    regression_rows: list[dict[str, Any]],
-) -> None:
-    wb = Workbook()
-    default_sheet = wb.active
-    wb.remove(default_sheet)
+def run() -> None:
+    input_path = Path(input_dir).expanduser().resolve()
+    output_path = Path(output_dir).expanduser().resolve()
+    output_path.mkdir(parents=True, exist_ok=True)
 
-    empirical_ws = wb.create_sheet("empirical_candidates")
-    regression_ws = wb.create_sheet("regression_candidates")
-
-    empirical_ws.append(EMPIRICAL_HEADERS)
-    for row in empirical_rows:
-        empirical_ws.append([row.get(header) for header in EMPIRICAL_HEADERS])
-
-    regression_ws.append(REGRESSION_HEADERS)
-    for row in regression_rows:
-        regression_ws.append([row.get(header) for header in REGRESSION_HEADERS])
-
-    for ws, headers, rows in (
-        (empirical_ws, EMPIRICAL_HEADERS, empirical_rows),
-        (regression_ws, REGRESSION_HEADERS, regression_rows),
-    ):
-        for col_idx in range(1, len(headers) + 1):
-            ws.cell(row=1, column=col_idx).font = Font(bold=True)
-        ws.freeze_panes = "A2"
-        ws.auto_filter.ref = ws.dimensions
-        autofit_columns(ws, headers, rows)
-
-    wb.save(output_path)
-
-
-def iter_source_files(input_folder: Path) -> Iterable[Path]:
-    for file_path in sorted(input_folder.iterdir()):
-        if not file_path.is_file():
-            continue
-        yield file_path
-
-
-def main() -> None:
-    if not input_dir.exists():
-        raise FileNotFoundError(f"Input folder does not exist: {input_dir}")
-
-    output_path = next_output_path(input_dir, output_dir)
+    if not input_path.exists():
+        raise FileNotFoundError(f"input_dir does not exist: {input_path}")
+    if not input_path.is_dir():
+        raise NotADirectoryError(f"input_dir is not a directory: {input_path}")
 
     empirical_rows: list[dict[str, Any]] = []
     regression_rows: list[dict[str, Any]] = []
-    processed_count = 0
+    processed_files = 0
 
     app = xw.App(visible=False, add_book=False)
     try:
-        app.display_alerts = False
-        app.screen_updating = False
+        for attr, value in (
+            ("display_alerts", False),
+            ("screen_updating", False),
+            ("enable_events", False),
+        ):
+            try:
+                setattr(app, attr, value)
+            except Exception:
+                pass
         try:
             app.calculation = "manual"
         except Exception:
-            # Calculation mode can vary across Excel backends.
             pass
 
-        for file_path in iter_source_files(input_dir):
-            filename = file_path.name
-            if filename.startswith("~"):
-                print(f"Skipped file: {filename} (temporary file)")
+        for file_path in sorted(input_path.iterdir()):
+            if not file_path.is_file():
+                continue
+            if file_path.name.startswith("~"):
+                print(f"Skipped file: {file_path.name} (temporary file)")
                 continue
             if file_path.suffix.lower() != ".xlsx":
-                print(f"Skipped file: {filename} (not .xlsx)")
+                print(f"Skipped file: {file_path.name} (not .xlsx)")
                 continue
 
-            metadata = parse_file_metadata(file_path)
-            if metadata is None:
-                print(f"Skipped file: {filename} (filename does not match expected pattern)")
-                continue
-
-            wb = None
+            workbook = None
             try:
-                wb = app.books.open(str(file_path), update_links=False)
-                empirical_sheet = ensure_sheet(wb, "Empirical Model")
-                regression_sheet = ensure_sheet(wb, "Regression Model")
+                workbook = app.books.open(str(file_path), update_links=False)
+                labels = parse_file_labels(file_path)
 
-                if empirical_sheet is None:
-                    print(f"Skipped empirical extraction for {filename}: missing 'Empirical Model'")
-                else:
-                    empirical_rows.extend(
-                        process_empirical_sheet(
-                            empirical_sheet,
-                            metadata,
-                            filename,
-                            app,
-                        )
+                empirical_rows.extend(
+                    extract_empirical_candidates(
+                        workbook=workbook,
+                        labels=labels,
+                        source_file=file_path.name,
                     )
-
-                if regression_sheet is None:
-                    print(f"Skipped regression extraction for {filename}: missing 'Regression Model'")
-                else:
-                    regression_rows.extend(
-                        process_regression_sheet(
-                            regression_sheet,
-                            metadata,
-                            filename,
-                            app,
-                        )
+                )
+                regression_rows.extend(
+                    extract_regression_candidates(
+                        workbook=workbook,
+                        labels=labels,
+                        source_file=file_path.name,
                     )
-
-                processed_count += 1
-                print(f"Processed file: {filename}")
+                )
+                processed_files += 1
+                print(f"Processed file: {file_path.name}")
             except Exception as exc:
-                print(f"Skipped file: {filename} (processing error: {exc})")
+                print(f"Skipped file: {file_path.name} (error: {exc})")
             finally:
-                if wb is not None:
-                    close_source_workbook(wb)
+                if workbook is not None:
+                    safe_close_workbook(workbook)
     finally:
         app.quit()
 
-    write_output_workbook(output_path, empirical_rows, regression_rows)
+    destination = choose_output_path(input_path=input_path, output_path=output_path)
+    out_wb = Workbook()
+    default_sheet = out_wb.active
+    out_wb.remove(default_sheet)
+    write_sheet(out_wb, "empirical_candidates", EMPIRICAL_HEADERS, empirical_rows)
+    write_sheet(out_wb, "regression_candidates", REGRESSION_HEADERS, regression_rows)
+    out_wb.save(destination)
 
-    print(f"Output path: {output_path}")
-    print(f"Number of files processed: {processed_count}")
+    print(f"Output path: {destination}")
+    print(f"Number of files processed: {processed_files}")
     print(f"Number of empirical rows: {len(empirical_rows)}")
     print(f"Number of regression rows: {len(regression_rows)}")
 
 
 if __name__ == "__main__":
-    main()
+    run()
