@@ -187,7 +187,7 @@ def is_effectively_empty(*values: Any) -> bool:
     return True
 
 
-def parse_file_labels(file_path: Path) -> FileLabels:
+def parse_file_labels(file_path: Path) -> Optional[FileLabels]:
     """
     Parse naming style similar to:
     MedMiner_Model - AORT - MidJan2026_Send.xlsx
@@ -195,25 +195,20 @@ def parse_file_labels(file_path: Path) -> FileLabels:
     stem = file_path.stem
     parts = [p.strip() for p in stem.split(" - ")]
 
-    ticker = parts[1].strip() if len(parts) >= 2 else "UNKNOWN"
-    period_segment = parts[2].strip() if len(parts) >= 3 else ""
-    period_token = period_segment.split("_", 1)[0]
+    if len(parts) < 3:
+        return None
 
-    match = re.search(
-        r"(Early|Mid|Late)\s*([A-Za-z]{3,9})\s*(\d{4})",
+    ticker = parts[1].strip().upper()
+    period_segment = parts[2].strip()
+    period_token = re.sub(r"(?i)_send$", "", period_segment).strip()
+
+    match = re.match(
+        r"(?i)^(Early|Mid|Late)\s*([A-Za-z]{3,9})\s*(\d{4})$",
         period_token,
-        flags=re.IGNORECASE,
     )
 
     if not match:
-        # Fallback if filename does not strictly follow expected pattern.
-        model_period = period_token if period_token else "UnknownPeriod"
-        return FileLabels(
-            model=f"{ticker}_{model_period}",
-            ticker=ticker,
-            model_period=model_period,
-            model_date="",
-        )
+        return None
 
     phase = match.group(1).title()  # Early/Mid/Late
     month_text = match.group(2)
@@ -222,13 +217,7 @@ def parse_file_labels(file_path: Path) -> FileLabels:
     month_key = month_text[:3].lower()
     month_num = MONTH_MAP.get(month_key)
     if month_num is None:
-        model_period = f"{phase}{month_text}_{year}"
-        return FileLabels(
-            model=f"{ticker}_{model_period}",
-            ticker=ticker,
-            model_period=model_period,
-            model_date="",
-        )
+        return None
 
     day = DAY_MAP[phase.lower()]
     model_date = date(year, month_num, day).isoformat()
@@ -260,6 +249,7 @@ def build_output_path(input_path: Path, output_path: Path) -> Path:
 def source_files(input_path: Path) -> Iterable[Path]:
     for file_path in sorted(input_path.iterdir()):
         if not file_path.is_file():
+            print(f"Skipped {file_path.name}: not a file")
             continue
         if file_path.suffix.lower() != ".xlsx":
             print(f"Skipped {file_path.name}: not an .xlsx file")
@@ -707,11 +697,14 @@ def main() -> None:
 
         for file_path in source_files(input_path):
             print(f"Processing {file_path.name}")
+            labels = parse_file_labels(file_path)
+            if labels is None:
+                print(f"Skipped {file_path.name}: filename pattern not recognized")
+                continue
+
             wb: Optional[xw.Book] = None
             try:
                 wb = app.books.open(str(file_path), update_links=False)
-
-                labels = parse_file_labels(file_path)
                 empirical_sheet = get_sheet_safe(wb, EMPIRICAL_MODEL_SHEET)
                 regression_sheet = get_sheet_safe(wb, REGRESSION_MODEL_SHEET)
 
