@@ -92,26 +92,26 @@ def to_matrix(value: Any) -> List[List[Any]]:
     return [[value]]
 
 
-def parse_file_labels(file_path: Path) -> Optional[Dict[str, str]]:
+def parse_file_labels(file_path: Path) -> Dict[str, str]:
     stem = file_path.stem
     parts = [part.strip() for part in stem.split(" - ")]
-    if len(parts) < 3:
-        return None
 
-    ticker = parts[1]
-    period_token = parts[2].split("_", 1)[0].strip()
+    ticker = parts[1] if len(parts) >= 2 and parts[1] else "UNKNOWN"
+    period_token = parts[2].split("_", 1)[0].strip() if len(parts) >= 3 else ""
+
+    model_period = "UNKNOWN"
+    model_date = ""
     match = PERIOD_PATTERN.fullmatch(period_token)
-    if not match:
-        return None
+    if match:
+        period_word = match.group(1).capitalize()
+        month_word = match.group(2).capitalize()
+        year_text = match.group(3)
+        month_num = MONTH_BY_ABBR[month_word.lower()]
+        day_num = DAY_BY_PERIOD[period_word.lower()]
+        model_date = date(int(year_text), month_num, day_num).isoformat()
+        model_period = f"{period_word}{month_word}_{year_text}"
 
-    period_word = match.group(1).capitalize()
-    month_word = match.group(2).capitalize()
-    year_text = match.group(3)
-    month_num = MONTH_BY_ABBR[month_word.lower()]
-    day_num = DAY_BY_PERIOD[period_word.lower()]
-    model_date = date(int(year_text), month_num, day_num).isoformat()
-    model_period = f"{period_word}{month_word}_{year_text}"
-    model = f"{ticker}_{model_period}"
+    model = f"{ticker}_{model_period}" if model_period != "UNKNOWN" else ticker
     return {
         "model": model,
         "ticker": ticker,
@@ -432,12 +432,6 @@ def main() -> None:
     try:
         for file_path in iter_candidate_files(input_dir):
             file_meta = parse_file_labels(file_path)
-            if file_meta is None:
-                print(
-                    f"skipped file: {file_path.name} "
-                    "(filename does not match expected label pattern)"
-                )
-                continue
 
             wb = None
             try:
