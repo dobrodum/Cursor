@@ -618,7 +618,7 @@ def main() -> None:
 
     try:
         for file_path in files:
-            print(f"Processed file: {file_path.name}")
+            print(f"Processing file: {file_path.name}")
             wb: Optional[xw.Book] = None
             try:
                 wb = app.books.open(str(file_path), update_links=False)
@@ -641,6 +641,7 @@ def main() -> None:
                     )
 
                 processed_count += 1
+                print(f"Processed file: {file_path.name}")
             except Exception as exc:
                 print(f"Skipped: {file_path.name} (error: {exc})")
             finally:
