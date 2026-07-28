@@ -311,6 +311,9 @@ def detect_candidate_rows(sheet: xw.Sheet, anchor_row: int, anchor_col: int, n_r
     if down_rows:
         return down_rows
 
+    if anchor_row <= 1:
+        return [anchor_row + i for i in range(1, n_rows + 1)]
+
     up_start = max(1, anchor_row - (n_rows + 25))
     up_values = to_1d(sheet.range((up_start, anchor_col), (anchor_row - 1, anchor_col)).value)
     up_rows = collect_candidate_rows(up_values, up_start, n_rows)
