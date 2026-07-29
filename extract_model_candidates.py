@@ -139,6 +139,10 @@ def normalize_text(value: Any) -> str:
     return TEXT_NORMALIZER.sub("_", text).strip("_")
 
 
+def safe_col(col: int) -> int:
+    return max(1, col)
+
+
 def to_2d(values: Any) -> list[list[Any]]:
     if values is None:
         return []
@@ -386,32 +390,32 @@ def extract_empirical_rows(sheet: xw.Sheet, meta: FileMeta, source_file: str) ->
     )
 
     forecast_max_col = anchor.col
-    forecast_min_col = find_col(header_entries, ["min"]) or (anchor.col + 1)
+    forecast_min_col = find_col(header_entries, ["min"]) or safe_col(anchor.col + 1)
     forecast_value_col = (
         find_col(header_entries, ["estimated", "total", "sold"])
         or find_col(header_entries, ["tot", "fcst"])
         or find_col(header_entries, ["forecast"], ["max", "min"])
-        or (anchor.col - 1)
+        or safe_col(anchor.col - 1)
     )
     num_quarters_col = (
         find_col(header_entries, ["num", "quarters"])
         or find_col(header_entries, ["quarters", "used"])
-        or (anchor.col - 6)
+        or safe_col(anchor.col - 6)
     )
-    last_quarter_col = find_col(header_entries, ["last", "quarter"]) or (anchor.col - 5)
+    last_quarter_col = find_col(header_entries, ["last", "quarter"]) or safe_col(anchor.col - 5)
     reported_sales_col = (
         find_col(header_entries, ["reported", "sales"])
         or find_col(header_entries, ["actual", "sales"])
-        or (anchor.col - 2)
+        or safe_col(anchor.col - 2)
     )
-    quarterly_sales_col = find_col(header_entries, ["quarterly", "sales"]) or (anchor.col - 3)
+    quarterly_sales_col = find_col(header_entries, ["quarterly", "sales"]) or safe_col(anchor.col - 3)
     growth_rate_col = find_col(header_entries, ["growth"])
     sales_captured_col = find_col(header_entries, ["captured"])
     avg_penetration_col = find_col(header_entries, ["avg", "penetration"])
     raw_penetration_col = (
         find_col(header_entries, ["penetration"], ["avg"])
         or find_col(header_entries, ["penetration"])
-        or (anchor.col - 8)
+        or safe_col(anchor.col - 8)
     )
 
     cols = [
@@ -529,22 +533,22 @@ def extract_regression_rows(sheet: xw.Sheet, meta: FileMeta, source_file: str) -
     )
 
     forecast_max_col = anchor.col
-    forecast_min_col = find_col(header_entries, ["min"]) or (anchor.col + 1)
+    forecast_min_col = find_col(header_entries, ["min"]) or safe_col(anchor.col + 1)
     forecast_value_col = (
         find_col(header_entries, ["tot", "fcst", "wo", "sa"])
         or find_col(header_entries, ["tot", "fcst"])
         or find_col(header_entries, ["forecast"], ["max", "min"])
-        or (anchor.col - 1)
+        or safe_col(anchor.col - 1)
     )
     num_quarters_col = (
         find_col(header_entries, ["num", "quarters"])
         or find_col(header_entries, ["quarters", "used"])
-        or (anchor.col - 6)
+        or safe_col(anchor.col - 6)
     )
     actual_value_col = find_col(header_entries, ["actual"])
 
-    x_col = anchor.col - 11
-    y_col = anchor.col - 7
+    x_col = safe_col(anchor.col - 11)
+    y_col = safe_col(anchor.col - 7)
     pair_last_row = find_last_numeric_pair_row(cache, x_col=x_col, y_col=y_col, upper_bound_row=anchor.row - 1)
 
     cols = [forecast_max_col, forecast_min_col, forecast_value_col, num_quarters_col]
