@@ -273,6 +273,7 @@ def find_column_by_phrases(
     ctx: SheetContext,
     phrases: Iterable[str],
     anchor_row: int,
+    anchor_col: int | None = None,
     row_min: int | None = None,
     row_max: int | None = None,
 ) -> int | None:
@@ -282,6 +283,7 @@ def find_column_by_phrases(
 
     min_row = row_min if row_min is not None else ctx.top_row
     max_row = row_max if row_max is not None else ctx.last_row
+    target_col = anchor_col if anchor_col is not None else ctx.left_col
 
     best: tuple[int, int] | None = None
     for row in range(min_row, max_row + 1):
@@ -290,7 +292,7 @@ def find_column_by_phrases(
             if not text:
                 continue
             if any(phrase in text for phrase in phrase_set):
-                score = abs(row - anchor_row) * 100 + abs(col - ctx.left_col)
+                score = abs(row - anchor_row) * 100 + abs(col - target_col)
                 if best is None or score < best[0]:
                     best = (score, col)
     return best[1] if best else None
@@ -361,11 +363,19 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
     ctx = read_sheet_context(sheet)
     anchor_row, anchor_col = find_anchor(ctx, "max")
 
-    min_col = find_column_by_phrases(ctx, ["min"], anchor_row, row_min=anchor_row - 2, row_max=anchor_row + 2) or (anchor_col + 1)
+    min_col = find_column_by_phrases(
+        ctx,
+        ["min"],
+        anchor_row,
+        anchor_col=anchor_col,
+        row_min=anchor_row - 2,
+        row_max=anchor_row + 2,
+    ) or (anchor_col + 1)
     forecast_col = find_column_by_phrases(
         ctx,
         ["estimated total sold", "forecast value", "forecast total"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 1)
@@ -373,6 +383,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["reported sales", "actual value", "actual sales"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 2)
@@ -380,6 +391,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["num quarters used", "quarters used", "n quarters", "num quarters"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 4)
@@ -387,6 +399,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["last quarter used", "last quarter"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 3)
@@ -394,6 +407,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["quarterly sales"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 4,
         row_max=anchor_row + 4,
     ) or (anchor_col - 6)
@@ -401,6 +415,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["growth rate", "growth"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 4,
         row_max=anchor_row + 4,
     ) or (anchor_col - 5)
@@ -408,6 +423,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["sales captured in db", "captured in db", "captured"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 4,
         row_max=anchor_row + 4,
     ) or (anchor_col - 7)
@@ -415,6 +431,7 @@ def extract_empirical_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> li
         ctx,
         ["penetration pct", "penetration", "penetration %"],
         anchor_row,
+        anchor_col=anchor_col,
     )
 
     summary_rows = collect_summary_rows(
@@ -534,11 +551,19 @@ def extract_regression_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> l
     y_col = anchor_col - 7
     x_col = anchor_col - 11
 
-    min_col = find_column_by_phrases(ctx, ["min"], anchor_row, row_min=anchor_row - 2, row_max=anchor_row + 2) or (anchor_col + 1)
+    min_col = find_column_by_phrases(
+        ctx,
+        ["min"],
+        anchor_row,
+        anchor_col=anchor_col,
+        row_min=anchor_row - 2,
+        row_max=anchor_row + 2,
+    ) or (anchor_col + 1)
     forecast_col = find_column_by_phrases(
         ctx,
         ["tot fcst w/o sa", "total forecast w/o sa", "forecast total w/o sa"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 1)
@@ -546,6 +571,7 @@ def extract_regression_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> l
         ctx,
         ["num quarters used", "quarters used", "n quarters", "num quarters"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     ) or (anchor_col - 3)
@@ -553,6 +579,7 @@ def extract_regression_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> l
         ctx,
         ["actual", "reported sales", "actual value"],
         anchor_row,
+        anchor_col=anchor_col,
         row_min=anchor_row - 3,
         row_max=anchor_row + 3,
     )
@@ -631,8 +658,8 @@ def extract_regression_rows(wb: xw.Book, meta: ModelMeta, source_file: str) -> l
             round(slope, 8) if slope is not None else None,
         )
 
-        # Prevent duplicate trailing row from repeated formula output.
-        if prev_signature is not None and signature == prev_signature:
+        # Prevent duplicate final row from repeated formula output.
+        if idx == (max_loop - 1) and prev_signature is not None and signature == prev_signature:
             continue
         prev_signature = signature
 
