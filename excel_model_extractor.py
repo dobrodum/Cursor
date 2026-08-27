@@ -78,12 +78,13 @@ MONTH_TO_NUM = {
 
 
 def to_2d(values: Any) -> List[List[Any]]:
-    if isinstance(values, list):
+    if isinstance(values, (list, tuple)):
         if not values:
             return []
-        if isinstance(values[0], list):
-            return values
-        return [values]
+        first = values[0]
+        if isinstance(first, (list, tuple)):
+            return [list(row) if isinstance(row, tuple) else row for row in values]
+        return [list(values)]
     return [[values]]
 
 
