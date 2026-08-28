@@ -176,7 +176,17 @@ def safe_value(value: Any) -> Any:
 
 def set_r1c1_formula2(cell: xw.Range, formula: str) -> None:
     try:
+        cell.api.Formula2R1C1 = formula
+        return
+    except Exception:
+        pass
+    try:
         cell.formula2 = formula
+        return
+    except Exception:
+        pass
+    try:
+        cell.api.FormulaR1C1 = formula
     except Exception:
         cell.formula = formula
 
