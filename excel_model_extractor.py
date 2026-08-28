@@ -646,7 +646,6 @@ def extract_regression_rows(wb: xw.Book, metadata: FileMetadata, source_file: st
 
         signature = safe_signature(
             (
-                n_quarters,
                 intercept_value,
                 slope_value,
                 forecast_total_without_sa,
