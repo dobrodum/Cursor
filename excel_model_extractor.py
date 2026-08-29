@@ -112,16 +112,18 @@ def to_float(value: Any) -> float | None:
     if not raw:
         return None
     try:
-        return float(raw)
+        parsed = float(raw)
+        if math.isnan(parsed) or math.isinf(parsed):
+            return None
+        return parsed
     except ValueError:
         return None
 
 
 def clean_for_excel(value: Any) -> Any:
-    num = to_float(value)
     if value is None:
         return ""
-    if num is not None and isinstance(value, float) and math.isnan(value):
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
         return ""
     return value
 
