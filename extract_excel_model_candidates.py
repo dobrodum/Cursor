@@ -217,12 +217,12 @@ def value_signature(value: Any) -> Any:
 def set_r1c1_formula2(cell: Any, formula_r1c1: str) -> None:
     """Set R1C1 formula with Formula2 first, then safe fallbacks."""
     try:
-        cell.formula2 = formula_r1c1
+        cell.api.Formula2R1C1 = formula_r1c1
         return
     except Exception:
         pass
     try:
-        cell.api.Formula2R1C1 = formula_r1c1
+        cell.formula2 = formula_r1c1
         return
     except Exception:
         pass
@@ -425,7 +425,7 @@ def choose_column(
     default_offset: int,
     keyword_patterns: Sequence[str],
 ) -> int:
-    default_col = anchor_col + default_offset
+    default_col = max(1, anchor_col + default_offset)
     if column_has_any_data(sheet, default_col, start_row, end_row):
         return default_col
 
@@ -726,6 +726,9 @@ def extract_regression_candidates(
     last_data_row = first_data_row + N_QUARTERS - 1
     y_col = anchor_col - 7
     x_col = anchor_col - 11
+    if x_col < 1 or y_col < 1:
+        print(f"skipped regression: {source_file} (anchor too close to column A for x/y offsets)")
+        return []
 
     header_cells = get_header_cells(sheet, anchor_row, anchor_col)
     col_map = {
