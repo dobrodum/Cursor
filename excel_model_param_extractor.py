@@ -582,6 +582,10 @@ def build_output_workbook(
 
 
 def iter_candidate_files(src_input_dir: Path) -> Iterable[Path]:
+    output_name_pattern = re.compile(
+        rf"^{re.escape(src_input_dir.name)}_PARAM(?:\.\d+)?\.xlsx$",
+        flags=re.IGNORECASE,
+    )
     for path in sorted(src_input_dir.iterdir()):
         if not path.is_file():
             print(f"Skipped {path.name}: not a file")
@@ -591,6 +595,9 @@ def iter_candidate_files(src_input_dir: Path) -> Iterable[Path]:
             continue
         if path.suffix.lower() != ".xlsx":
             print(f"Skipped {path.name}: not an .xlsx file")
+            continue
+        if output_name_pattern.match(path.name):
+            print(f"Skipped {path.name}: prior output workbook")
             continue
         yield path
 
