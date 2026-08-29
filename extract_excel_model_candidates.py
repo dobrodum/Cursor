@@ -182,10 +182,16 @@ def parse_filename_labels(file_name: str) -> Dict[str, str]:
         period_label = match.group(1).title()
         month_token = match.group(2).title()[:3]
         year = int(match.group(3))
-        month_num = list(calendar.month_abbr).index(month_token)
         day = PERIOD_DAY_MAP[period_label.lower()]
-        model_period = f"{period_label}{month_token}_{year}"
-        model_date = date(year, month_num, day).isoformat()
+
+        try:
+            month_num = list(calendar.month_abbr).index(month_token)
+        except ValueError:
+            month_num = 0
+
+        if month_num > 0:
+            model_period = f"{period_label}{month_token}_{year}"
+            model_date = date(year, month_num, day).isoformat()
 
     model = f"{ticker}_{model_period}" if model_period else ticker
     return {
