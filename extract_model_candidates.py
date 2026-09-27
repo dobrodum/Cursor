@@ -817,7 +817,7 @@ def main() -> None:
             except Exception:
                 pass
 
-    output_path = find_next_output_path(input_dir=input_dir, output_folder=output_dir)
+    output_path = find_next_output_path(input_folder=input_dir, output_folder=output_dir)
     save_output_workbook(output_path, empirical_rows, regression_rows)
 
     print(f"Output path: {output_path.resolve()}")
