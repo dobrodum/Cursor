@@ -212,7 +212,7 @@ def safe_close_workbook(wb: Any) -> None:
 
     # Last-resort close attempt with Excel alerts disabled
     try:
-        wb.close()
+        wb.api.Close(False)
     except Exception:
         pass
 
@@ -301,6 +301,11 @@ def set_r1c1_formula2(cell: Any, formula_r1c1: str) -> None:
     # Requested path: R1C1 with .formula2
     try:
         cell.formula2 = formula_r1c1
+        # Explicit R1C1 assignment for engines where Formula2 defaults to A1 style.
+        try:
+            cell.api.Formula2R1C1 = formula_r1c1
+        except Exception:
+            pass
         return
     except Exception:
         pass
