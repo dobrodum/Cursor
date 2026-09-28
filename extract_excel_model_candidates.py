@@ -87,7 +87,7 @@ DAY_BY_PERIOD = {"early": 5, "mid": 15, "late": 25}
 FILENAME_PATTERN = re.compile(
     r".*-\s*(?P<ticker>[A-Za-z0-9]+)\s*-\s*"
     r"(?P<period>(?P<bucket>Early|Mid|Late)(?P<month>[A-Za-z]{3,4})(?P<year>\d{4}))"
-    r"(?:[_\-\s].*)?$",
+    r"(?:[_\-\s\.].*)?$",
     flags=re.IGNORECASE,
 )
 
@@ -116,6 +116,8 @@ def to_float(value: Any) -> Optional[float]:
     text = str(value).strip().replace(",", "")
     if not text:
         return None
+    if text.endswith("%"):
+        text = text[:-1]
     try:
         return float(text)
     except ValueError:
@@ -261,6 +263,25 @@ def cell_from_block(
     return row[c_idx]
 
 
+def value_from_anchor_offset(
+    block: List[List[Any]],
+    block_top_row: int,
+    block_left_col: int,
+    abs_row: int,
+    anchor_col: int,
+    offset: Optional[int],
+) -> Any:
+    if offset is None:
+        return None
+    return cell_from_block(
+        block=block,
+        block_top_row=block_top_row,
+        block_left_col=block_left_col,
+        abs_row=abs_row,
+        abs_col=anchor_col + offset,
+    )
+
+
 def build_history_rows(sheet: xw.Sheet, value_col: int, anchor_row: int) -> List[int]:
     start_row = max(1, anchor_row - 300)
     end_row = anchor_row - 1
@@ -381,30 +402,33 @@ def extract_empirical_candidates(
         current_row = anchor_row + idx + 1
         default_n_quarters = idx + 1
 
-        num_quarters_used = cell_from_block(
-            block,
-            block_top_row,
-            block_left_col,
-            current_row,
-            anchor_col + (num_quarters_offset or 0),
+        num_quarters_used = value_from_anchor_offset(
+            block=block,
+            block_top_row=block_top_row,
+            block_left_col=block_left_col,
+            abs_row=current_row,
+            anchor_col=anchor_col,
+            offset=num_quarters_offset,
         )
         if to_float(num_quarters_used) is None:
             num_quarters_used = default_n_quarters
         num_quarters_used = int(float(num_quarters_used))
 
-        forecast_value = cell_from_block(
-            block,
-            block_top_row,
-            block_left_col,
-            current_row,
-            anchor_col + (forecast_offset or 0),
+        forecast_value = value_from_anchor_offset(
+            block=block,
+            block_top_row=block_top_row,
+            block_left_col=block_left_col,
+            abs_row=current_row,
+            anchor_col=anchor_col,
+            offset=forecast_offset,
         )
-        actual_value = cell_from_block(
-            block,
-            block_top_row,
-            block_left_col,
-            current_row,
-            anchor_col + (actual_offset or 0),
+        actual_value = value_from_anchor_offset(
+            block=block,
+            block_top_row=block_top_row,
+            block_left_col=block_left_col,
+            abs_row=current_row,
+            anchor_col=anchor_col,
+            offset=actual_offset,
         )
         forecast_max = cell_from_block(
             block,
@@ -413,12 +437,13 @@ def extract_empirical_candidates(
             current_row,
             anchor_col,
         )
-        forecast_min = cell_from_block(
-            block,
-            block_top_row,
-            block_left_col,
-            current_row,
-            anchor_col + (min_offset or 0),
+        forecast_min = value_from_anchor_offset(
+            block=block,
+            block_top_row=block_top_row,
+            block_left_col=block_left_col,
+            abs_row=current_row,
+            anchor_col=anchor_col,
+            offset=min_offset,
         )
 
         if all(v in (None, "") for v in [forecast_value, actual_value, forecast_max, forecast_min]):
@@ -433,11 +458,11 @@ def extract_empirical_candidates(
         avg_penetration_pct = avg_penetration_values[idx]
         if avg_penetration_pct in (None, ""):
             avg_penetration_pct = cell_from_block(
-                block,
-                block_top_row,
-                block_left_col,
-                current_row,
-                anchor_col + (penetration_offset or 0),
+                block=block,
+                block_top_row=block_top_row,
+                block_left_col=block_left_col,
+                abs_row=current_row,
+                abs_col=anchor_col + (penetration_offset or 0),
             )
 
         row_data = {
@@ -449,12 +474,13 @@ def extract_empirical_candidates(
             "parameter_name": "avg_penetration_pct",
             "parameter_value": number_or_blank(avg_penetration_pct),
             "num_quarters_used": num_quarters_used,
-            "last_quarter_used": cell_from_block(
-                block,
-                block_top_row,
-                block_left_col,
-                current_row,
-                anchor_col + (last_quarter_offset or 0),
+            "last_quarter_used": value_from_anchor_offset(
+                block=block,
+                block_top_row=block_top_row,
+                block_left_col=block_left_col,
+                abs_row=current_row,
+                anchor_col=anchor_col,
+                offset=last_quarter_offset,
             ),
             "forecast_value": number_or_blank(forecast_value),
             "actual_value": number_or_blank(actual_value),
@@ -463,39 +489,43 @@ def extract_empirical_candidates(
             "range_width": number_or_blank(range_width),
             "avg_penetration_pct": number_or_blank(avg_penetration_pct),
             "quarterly_sales": number_or_blank(
-                cell_from_block(
-                    block,
-                    block_top_row,
-                    block_left_col,
-                    current_row,
-                    anchor_col + (quarterly_sales_offset or 0),
+                value_from_anchor_offset(
+                    block=block,
+                    block_top_row=block_top_row,
+                    block_left_col=block_left_col,
+                    abs_row=current_row,
+                    anchor_col=anchor_col,
+                    offset=quarterly_sales_offset,
                 )
             ),
             "reported_sales": number_or_blank(
-                cell_from_block(
-                    block,
-                    block_top_row,
-                    block_left_col,
-                    current_row,
-                    anchor_col + (reported_sales_offset or 0),
+                value_from_anchor_offset(
+                    block=block,
+                    block_top_row=block_top_row,
+                    block_left_col=block_left_col,
+                    abs_row=current_row,
+                    anchor_col=anchor_col,
+                    offset=reported_sales_offset,
                 )
             ),
             "growth_rate_pct": number_or_blank(
-                cell_from_block(
-                    block,
-                    block_top_row,
-                    block_left_col,
-                    current_row,
-                    anchor_col + (growth_offset or 0),
+                value_from_anchor_offset(
+                    block=block,
+                    block_top_row=block_top_row,
+                    block_left_col=block_left_col,
+                    abs_row=current_row,
+                    anchor_col=anchor_col,
+                    offset=growth_offset,
                 )
             ),
             "sales_captured_in_db_pct": number_or_blank(
-                cell_from_block(
-                    block,
-                    block_top_row,
-                    block_left_col,
-                    current_row,
-                    anchor_col + (captured_offset or 0),
+                value_from_anchor_offset(
+                    block=block,
+                    block_top_row=block_top_row,
+                    block_left_col=block_left_col,
+                    abs_row=current_row,
+                    anchor_col=anchor_col,
+                    offset=captured_offset,
                 )
             ),
             "source_file": source_file,
@@ -611,12 +641,13 @@ def extract_regression_candidates(
     for idx in range(n_quarters):
         current_row = anchor_row + idx + 1
         default_n_quarters = idx + 1
-        n_candidate = cell_from_block(
-            block,
-            block_top_row,
-            block_left_col,
-            current_row,
-            anchor_col + (num_quarters_offset or 0),
+        n_candidate = value_from_anchor_offset(
+            block=block,
+            block_top_row=block_top_row,
+            block_left_col=block_left_col,
+            abs_row=current_row,
+            anchor_col=anchor_col,
+            offset=num_quarters_offset,
         )
         if to_float(n_candidate) is None:
             n_candidate = default_n_quarters
