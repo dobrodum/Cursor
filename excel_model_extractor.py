@@ -165,10 +165,15 @@ def safe_subtract(a: Optional[float], b: Optional[float]) -> Optional[float]:
 
 def set_formula2_r1c1(cell: xw.Range, formula_r1c1: str) -> None:
     try:
+        cell.formula2 = formula_r1c1
+        return
+    except Exception:
+        pass
+    try:
         cell.api.Formula2R1C1 = formula_r1c1
     except Exception:
-        # Fallback for older Excel APIs.
-        cell.formula2 = formula_r1c1
+        # Final fallback for older Excel APIs.
+        cell.formula = formula_r1c1
 
 
 def safe_close_workbook(wb: xw.Book) -> None:
