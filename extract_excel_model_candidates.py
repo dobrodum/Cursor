@@ -549,10 +549,12 @@ def main() -> None:
             wb: xw.Book | None = None
             try:
                 wb = app.books.open(str(item), update_links=False)
-                print(f"processed file: {item.name}")
-                empirical_rows.extend(build_empirical_rows(wb, labels, item.name))
-                regression_rows.extend(build_regression_rows(wb, labels, item.name))
+                file_empirical_rows = build_empirical_rows(wb, labels, item.name)
+                file_regression_rows = build_regression_rows(wb, labels, item.name)
+                empirical_rows.extend(file_empirical_rows)
+                regression_rows.extend(file_regression_rows)
                 files_processed += 1
+                print(f"processed file: {item.name}")
             except Exception as exc:
                 print(f"skipped file: {item.name} (processing error: {exc})")
             finally:
