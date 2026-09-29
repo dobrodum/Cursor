@@ -730,7 +730,7 @@ def main() -> None:
                 print(f"skipped {file_path.name}: not an .xlsx file")
                 continue
 
-            print(f"processed {file_path.name}")
+            print(f"processing {file_path.name}")
             workbook: Optional[xw.Book] = None
             try:
                 workbook = app.books.open(str(file_path), update_links=False)
@@ -738,6 +738,7 @@ def main() -> None:
                 empirical_rows.extend(extract_empirical_candidates(workbook, labels, file_path.name))
                 regression_rows.extend(extract_regression_candidates(workbook, labels, file_path.name))
                 processed_files += 1
+                print(f"processed {file_path.name}")
             except Exception as exc:
                 print(f"skipped {file_path.name}: {exc}")
             finally:
