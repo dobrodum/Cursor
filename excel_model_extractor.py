@@ -444,9 +444,14 @@ def process_empirical_sheet(
     anchor_row, anchor_col = anchor
     headers = build_header_cells(sheet, anchor_row, anchor_col)
     columns = resolve_columns(anchor_col, headers, EMP_DEFAULT_OFFSETS)
-    quarter_rows = find_num_quarter_rows(sheet, columns["num_quarters_used"], anchor_row, max_rows=10)
-    if not quarter_rows:
-        quarter_rows = [(n, anchor_row + n) for n in range(1, 11)]
+    detected_quarter_rows = find_num_quarter_rows(
+        sheet,
+        columns["num_quarters_used"],
+        anchor_row,
+        max_rows=10,
+    )
+    detected_row_map = {n: row for n, row in detected_quarter_rows}
+    quarter_rows = [(n, detected_row_map.get(n, anchor_row + n)) for n in range(1, 11)]
 
     avg_formula_col = anchor_col + 8
     can_compute_avg = columns["sales_captured_in_db_pct"] > 0
