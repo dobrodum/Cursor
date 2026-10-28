@@ -175,7 +175,7 @@ def parse_file_label(file_name: str) -> FileLabel | None:
 
     ticker = parts[1]
     period_chunk = parts[2]
-    match = re.search(r"\b(Early|Mid|Late)([A-Za-z]+)(\d{4})\b", period_chunk, flags=re.IGNORECASE)
+    match = re.search(r"(Early|Mid|Late)([A-Za-z]+)(\d{4})", period_chunk, flags=re.IGNORECASE)
     if not match:
         return None
 
