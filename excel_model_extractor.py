@@ -395,7 +395,7 @@ def extract_empirical_rows(
 
         pen_values: List[float] = []
         for r in training_rows[-n:]:
-            value = as_float(snapshot.get(r, penetration_work_col))
+            value = as_float(sheet.cells(r, penetration_work_col).value)
             if value is not None and value > 0:
                 pen_values.append(value)
         if not pen_values:
