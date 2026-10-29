@@ -588,7 +588,6 @@ def main() -> None:
                 )
                 continue
 
-            print(f"Processed file: {file_path.name}")
             wb: Optional[xw.Book] = None
 
             try:
@@ -616,6 +615,7 @@ def main() -> None:
                         f"Skipped file: {file_path.name} "
                         f"(regression sheet error: {exc})"
                     )
+                print(f"Processed file: {file_path.name}")
             except Exception as exc:
                 print(f"Skipped file: {file_path.name} (open failed: {exc})")
             finally:
