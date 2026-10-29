@@ -600,8 +600,11 @@ def main() -> None:
             if file_path.suffix.lower() != ".xlsx":
                 print(f"Skipped file: {file_path.name} (not an .xlsx file)")
                 continue
+            if re.search(r"_PARAM(\.\d+)?\.xlsx$", file_path.name, flags=re.IGNORECASE):
+                print(f"Skipped file: {file_path.name} (generated output workbook)")
+                continue
 
-            print(f"Processed file: {file_path.name}")
+            print(f"Processing file: {file_path.name}")
             wb: Optional[xw.Book] = None
 
             try:
@@ -630,6 +633,8 @@ def main() -> None:
                         f"Skipped file: {file_path.name} "
                         f"(regression sheet error: {exc})"
                     )
+
+                print(f"Processed file: {file_path.name}")
 
             except Exception as exc:
                 print(f"Skipped file: {file_path.name} (open failed: {exc})")
