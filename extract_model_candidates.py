@@ -529,7 +529,7 @@ def process_all_files(input_path: Path, out_path: Path) -> Tuple[int, int, int, 
                 print(f"skipped {file_path.name}: not .xlsx")
                 continue
 
-            print(f"processed {file_path.name}")
+            print(f"processing {file_path.name}")
             workbook: Optional[xw.Book] = None
             try:
                 workbook = app.books.open(str(file_path), update_links=False)
@@ -537,6 +537,7 @@ def process_all_files(input_path: Path, out_path: Path) -> Tuple[int, int, int, 
                 empirical_rows.extend(extract_empirical_rows(workbook, labels, file_path.name))
                 regression_rows.extend(extract_regression_rows(workbook, labels, file_path.name))
                 processed_files += 1
+                print(f"processed {file_path.name}")
             except Exception as exc:
                 print(f"skipped {file_path.name}: processing error ({exc})")
             finally:
