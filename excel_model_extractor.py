@@ -644,6 +644,7 @@ def main() -> None:
                     )
                 )
                 files_processed += 1
+                print(f"Processed: {file_path.name}")
             except Exception as exc:
                 print(f"Skipped: {file_path.name} (error: {exc})")
             finally:
