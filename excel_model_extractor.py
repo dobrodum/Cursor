@@ -575,7 +575,7 @@ def main() -> None:
             pass
 
         for file_path in source_files:
-            log(f"Processed file: {file_path.name}")
+            log(f"Processing file: {file_path.name}")
             workbook: xw.Book | None = None
             try:
                 workbook = app.books.open(str(file_path), update_links=False)
@@ -606,6 +606,7 @@ def main() -> None:
                     )
 
                 processed_count += 1
+                log(f"Processed file: {file_path.name}")
             except Exception as exc:
                 log(f"Skipped file: {file_path.name} (error: {exc})")
             finally:
