@@ -394,10 +394,29 @@ def process_empirical_sheet(
 
     max_quarters = min(N_QUARTERS, len(history_rows)) if history_rows else N_QUARTERS
     helper_col = max(right_col + 2, anchor_col + 2)
-    avg_pen_cell = sheet.cells(anchor_row, helper_col)
+    avg_formula_cells: Dict[int, xw.Range] = {}
 
     latest_x = to_float(sheet.cells(history_rows[-1], x_col).value) if history_rows else None
     latest_y = to_float(sheet.cells(history_rows[-1], y_col).value) if history_rows else None
+    end_history_row = history_rows[-1] if history_rows else None
+
+    # Populate helper formulas first, then calculate once for the sheet.
+    for n_quarters in range(1, max_quarters + 1):
+        candidate_row = anchor_row + n_quarters
+        start_history_row = history_rows[-n_quarters] if history_rows and n_quarters <= len(history_rows) else None
+        avg_penetration = to_float(get_cell_value(sheet, candidate_row, avg_pen_col))
+        if avg_penetration is None and start_history_row and end_history_row:
+            formula_cell = sheet.cells(candidate_row, helper_col)
+            avg_formula = (
+                "=AVERAGE("
+                f"IFERROR(R{start_history_row}C{y_col}:R{end_history_row}C{y_col}/"
+                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col},\"\"))"
+            )
+            set_formula2(formula_cell, avg_formula)
+            avg_formula_cells[n_quarters] = formula_cell
+
+    if avg_formula_cells:
+        workbook.app.calculate()
 
     for n_quarters in range(1, max_quarters + 1):
         candidate_row = anchor_row + n_quarters
@@ -405,18 +424,10 @@ def process_empirical_sheet(
         num_quarters_used = int(num_quarters_value) if num_quarters_value is not None else n_quarters
 
         start_history_row = history_rows[-n_quarters] if history_rows and n_quarters <= len(history_rows) else None
-        end_history_row = history_rows[-1] if history_rows else None
 
         avg_penetration = to_float(get_cell_value(sheet, candidate_row, avg_pen_col))
-        if avg_penetration is None and start_history_row and end_history_row:
-            avg_formula = (
-                "=AVERAGE("
-                f"IFERROR(R{start_history_row}C{y_col}:R{end_history_row}C{y_col}/"
-                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col},\"\"))"
-            )
-            set_formula2(avg_pen_cell, avg_formula)
-            workbook.app.calculate()
-            avg_penetration = to_float(avg_pen_cell.value)
+        if avg_penetration is None and n_quarters in avg_formula_cells:
+            avg_penetration = to_float(avg_formula_cells[n_quarters].value)
 
         quarterly_sales = to_float(get_cell_value(sheet, candidate_row, quarterly_sales_col))
         if quarterly_sales is None:
@@ -487,7 +498,8 @@ def process_empirical_sheet(
         }
         rows.append(row)
 
-    avg_pen_cell.value = None
+    for formula_cell in avg_formula_cells.values():
+        formula_cell.value = None
     return rows
 
 
@@ -536,10 +548,36 @@ def process_regression_sheet(
 
     max_quarters = min(N_QUARTERS, len(history_rows)) if history_rows else N_QUARTERS
     helper_col = max(right_col + 2, anchor_col + 2)
-    intercept_cell = sheet.cells(anchor_row, helper_col)
-    slope_cell = sheet.cells(anchor_row, helper_col + 1)
+    formula_cells_by_quarter: Dict[int, Tuple[xw.Range, xw.Range]] = {}
 
     latest_x = to_float(sheet.cells(history_rows[-1], x_col).value) if history_rows else None
+    end_history_row = history_rows[-1] if history_rows else None
+
+    # Populate helper formulas first, then calculate once for the sheet.
+    for n_quarters in range(1, max_quarters + 1):
+        candidate_row = anchor_row + n_quarters
+        start_history_row = history_rows[-n_quarters] if history_rows and n_quarters <= len(history_rows) else None
+        intercept_value = to_float(get_cell_value(sheet, candidate_row, intercept_col))
+        slope_value = to_float(get_cell_value(sheet, candidate_row, slope_col))
+        if (intercept_value is None or slope_value is None) and start_history_row and end_history_row:
+            intercept_formula = (
+                "=IFERROR("
+                f"INTERCEPT(R{start_history_row}C{y_col}:R{end_history_row}C{y_col},"
+                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col}),\"\")"
+            )
+            slope_formula = (
+                "=IFERROR("
+                f"SLOPE(R{start_history_row}C{y_col}:R{end_history_row}C{y_col},"
+                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col}),\"\")"
+            )
+            intercept_cell = sheet.cells(candidate_row, helper_col)
+            slope_cell = sheet.cells(candidate_row, helper_col + 1)
+            set_formula2(intercept_cell, intercept_formula)
+            set_formula2(slope_cell, slope_formula)
+            formula_cells_by_quarter[n_quarters] = (intercept_cell, slope_cell)
+
+    if formula_cells_by_quarter:
+        workbook.app.calculate()
 
     for n_quarters in range(1, max_quarters + 1):
         candidate_row = anchor_row + n_quarters
@@ -548,21 +586,8 @@ def process_regression_sheet(
 
         intercept_value = to_float(get_cell_value(sheet, candidate_row, intercept_col))
         slope_value = to_float(get_cell_value(sheet, candidate_row, slope_col))
-
-        start_history_row = history_rows[-n_quarters] if history_rows and n_quarters <= len(history_rows) else None
-        end_history_row = history_rows[-1] if history_rows else None
-        if (intercept_value is None or slope_value is None) and start_history_row and end_history_row:
-            intercept_formula = (
-                f"=INTERCEPT(R{start_history_row}C{y_col}:R{end_history_row}C{y_col},"
-                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col})"
-            )
-            slope_formula = (
-                f"=SLOPE(R{start_history_row}C{y_col}:R{end_history_row}C{y_col},"
-                f"R{start_history_row}C{x_col}:R{end_history_row}C{x_col})"
-            )
-            set_formula2(intercept_cell, intercept_formula)
-            set_formula2(slope_cell, slope_formula)
-            workbook.app.calculate()
+        if (intercept_value is None or slope_value is None) and n_quarters in formula_cells_by_quarter:
+            intercept_cell, slope_cell = formula_cells_by_quarter[n_quarters]
             intercept_value = to_float(intercept_cell.value)
             slope_value = to_float(slope_cell.value)
 
@@ -621,8 +646,9 @@ def process_regression_sheet(
             continue
         rows.append(row)
 
-    intercept_cell.value = None
-    slope_cell.value = None
+    for intercept_cell, slope_cell in formula_cells_by_quarter.values():
+        intercept_cell.value = None
+        slope_cell.value = None
     return rows
 
 
