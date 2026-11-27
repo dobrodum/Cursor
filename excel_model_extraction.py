@@ -123,7 +123,6 @@ def parse_file_label(file_name: str) -> FileLabel:
     year = int(match.group("year"))
     day = EARLY_MID_LATE_DAY[phase]
 
-    month_number = date.fromisoformat(f"{year}-01-01").replace(month=1).month
     month_number = {
         "Jan": 1,
         "Feb": 2,
@@ -137,7 +136,7 @@ def parse_file_label(file_name: str) -> FileLabel:
         "Oct": 10,
         "Nov": 11,
         "Dec": 12,
-    }.get(month_token, month_number)
+    }.get(month_token, 1)
 
     model_period = f"{phase}{month_token}_{year}"
     model_date = date(year, month_number, day).isoformat()
@@ -446,9 +445,6 @@ def make_regression_rows(
     slope_cell = sheet.range((scratch_row, scratch_col + 1))
     forecast_cell = sheet.range((scratch_row, scratch_col + 2))
 
-    intercept_ref = intercept_cell.get_address(row_absolute=True, column_absolute=True, include_sheetname=False)
-    slope_ref = slope_cell.get_address(row_absolute=True, column_absolute=True, include_sheetname=False)
-
     rows: list[dict[str, Any]] = []
     previous_signature: tuple[Any, ...] | None = None
 
@@ -465,7 +461,10 @@ def make_regression_rows(
             slope_cell,
             f"=SLOPE(R{start_row}C{y_col}:R{end_row}C{y_col},R{start_row}C{x_col}:R{end_row}C{x_col})",
         )
-        set_formula2_r1c1(forecast_cell, f"={intercept_ref}+{slope_ref}*{x_future}")
+        set_formula2_r1c1(
+            forecast_cell,
+            f"=R{scratch_row}C{scratch_col}+R{scratch_row}C{scratch_col + 1}*{x_future}",
+        )
         wb.app.calculate()
 
         intercept = to_float(intercept_cell.value)
