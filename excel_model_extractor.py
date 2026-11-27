@@ -356,6 +356,13 @@ def calc_range_width(max_value: float | None, min_value: float | None) -> float 
     return max_value - min_value
 
 
+def set_r1c1_formula(cell: xw.Range, formula: str) -> None:
+    try:
+        cell.formula2 = formula
+    except Exception:
+        cell.formula = formula
+
+
 def extract_empirical_rows(
     workbook: xw.Book,
     meta: ModelMeta,
@@ -406,7 +413,7 @@ def extract_empirical_rows(
         start_row, start_col, _ = penetration_cells[-quarters_used]
         end_row, end_col, _ = penetration_cells[-1]
         formula_cell = sheet.cells(helper_start_row + idx, helper_col)
-        formula_cell.formula2 = f"=AVERAGE(R{start_row}C{start_col}:R{end_row}C{end_col})"
+        set_r1c1_formula(formula_cell, f"=AVERAGE(R{start_row}C{start_col}:R{end_row}C{end_col})")
         formula_cells.append((quarters_used, formula_cell))
 
     if formula_cells:
@@ -524,11 +531,13 @@ def extract_regression_rows(
         intercept_cell = sheet.cells(helper_start_row + idx, intercept_col)
         slope_cell = sheet.cells(helper_start_row + idx, slope_col)
 
-        intercept_cell.formula2 = (
-            f"=INTERCEPT(R{start_row}C{y_col}:R{end_row}C{y_col},R{start_row}C{x_col}:R{end_row}C{x_col})"
+        set_r1c1_formula(
+            intercept_cell,
+            f"=INTERCEPT(R{start_row}C{y_col}:R{end_row}C{y_col},R{start_row}C{x_col}:R{end_row}C{x_col})",
         )
-        slope_cell.formula2 = (
-            f"=SLOPE(R{start_row}C{y_col}:R{end_row}C{y_col},R{start_row}C{x_col}:R{end_row}C{x_col})"
+        set_r1c1_formula(
+            slope_cell,
+            f"=SLOPE(R{start_row}C{y_col}:R{end_row}C{y_col},R{start_row}C{x_col}:R{end_row}C{x_col})",
         )
         formula_cells.append((quarters_used, selected, intercept_cell, slope_cell))
 
@@ -684,7 +693,6 @@ def main() -> None:
 
     try:
         for file_path in files:
-            print(f"Processing file: {file_path.name}")
             workbook: xw.Book | None = None
             try:
                 metadata = parse_model_metadata(file_path.name)
@@ -706,6 +714,7 @@ def main() -> None:
                 )
 
                 processed_file_count += 1
+                print(f"Processed file: {file_path.name}")
             except Exception as exc:
                 print(f"Skipped {file_path.name}: {exc}")
             finally:
