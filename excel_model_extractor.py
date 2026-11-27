@@ -548,6 +548,9 @@ def discover_files(in_dir: Path) -> List[Path]:
         if file_path.suffix.lower() != ".xlsx":
             print(f"skipped {file_path.name}: not .xlsx")
             continue
+        if re.search(r"_param(?:\.\d+)?\.xlsx$", file_path.name, flags=re.IGNORECASE):
+            print(f"skipped {file_path.name}: generated output workbook")
+            continue
         files.append(file_path)
     return files
 
@@ -566,6 +569,7 @@ def main() -> None:
         try:
             app.display_alerts = False
             app.screen_updating = False
+            app.calculation = "manual"
         except Exception:
             pass
 
